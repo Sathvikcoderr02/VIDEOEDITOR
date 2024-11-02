@@ -328,7 +328,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     // Handle font information
     let fontPath;
     let fontName;
-    const fontsDir = '/Users/sathvik02/Documents/c/fonts/';
+    const fontsDir = '/root/VIDEOEDITOR/fonts/';
     const availableFonts = {
       'PoetsenOne': 'PoetsenOne-Regular.ttf',
       'Shadow': 'Shadow.otf',
