@@ -250,7 +250,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Transcription details:', JSON.stringify(transcription_details, null, 2));
 
     console.log('Starting video generation process...');
-    ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg'); // Update this path if necessary
+    ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg/ffmpeg'); // Update this path if necessary
 
     // Set video dimensions based on resolution and video_type
     let videoWidth, videoHeight;
