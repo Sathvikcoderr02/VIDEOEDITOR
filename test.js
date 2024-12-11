@@ -6,6 +6,8 @@ const https = require('https');
 const http = require('http');
 const axios = require('axios');
 const AWS = require('aws-sdk');
+const os = require('os');
+const si = require('systeminformation');
 
 // Define the animation style at the top of the file
 const animation_style = "style_1"; // Statically set the animation style
@@ -879,15 +881,43 @@ async function mixAudioWithBackgroundMusic(voiceoverPath, bgMusicPath, outputPat
   });
 }
 
-// Add at the very end of the file, after all existing code
+// Monitor system resources during stress test
+async function monitorResources(interval = 5000) {
+  let isMonitoring = true;
 
-// Stress test function
+  const monitor = async () => {
+    while (isMonitoring) {
+      const ram = await getAvailableRAM();
+      const cpu = await getCPUUsage();
+      
+      console.log('\n=== System Resources ===');
+      if (ram) {
+        console.log(`RAM Available: ${(ram.available / 1024 / 1024 / 1024).toFixed(2)}GB (${ram.percentAvailable.toFixed(2)}%)`);
+      }
+      if (cpu) {
+        console.log(`CPU Usage: ${cpu.total.toFixed(2)}% (User: ${cpu.user.toFixed(2)}%, System: ${cpu.system.toFixed(2)}%)`);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, interval));
+    }
+  };
+
+  monitor();
+  return () => { isMonitoring = false; };
+}
+
+// Stress test function with transcription details
 async function stressTest() {
-  const testText = "This is a test video for stress testing our video generation system. We want to see how many parallel requests we can handle.";
+  const testText = "This is a test video for stress testing our video generation system. We want to see how many parallel requests we can handle. Testing multiple languages and styles in parallel to understand system performance and resource utilization.";
+  const transcriptionDetails = generateTranscriptionDetails(testText);
   const numRequests = 50;
   const startTime = Date.now();
 
   console.log(`Starting stress test with ${numRequests} parallel requests...`);
+  console.log('Generated transcription segments:', transcriptionDetails.length);
+  
+  // Start resource monitoring
+  const stopMonitoring = await monitorResources(5000);
 
   try {
     const promises = Array(numRequests).fill().map(async (_, index) => {
@@ -896,7 +926,13 @@ async function stressTest() {
       
       try {
         console.log(`Starting request ${index + 1}: ${language}, ${style}`);
-        const videoUrl = await generateVideo(testText, language, style);
+        console.log(`Transcription segments for request ${index + 1}:`, transcriptionDetails.length);
+        
+        // Use transcription details in video generation
+        const videoUrl = await generateVideo(testText, language, style, {
+          transcriptionDetails,
+          videoAssets: 'all'
+        });
         
         return {
           requestId: index + 1,
@@ -904,6 +940,7 @@ async function stressTest() {
           style,
           status: 'success',
           url: videoUrl,
+          segmentsProcessed: transcriptionDetails.length,
           timestamp: new Date().toISOString()
         };
       } catch (error) {
@@ -914,6 +951,7 @@ async function stressTest() {
           style,
           status: 'failed',
           error: error.message,
+          segmentsAttempted: transcriptionDetails.length,
           timestamp: new Date().toISOString()
         };
       }
@@ -925,12 +963,16 @@ async function stressTest() {
     const successful = results.filter(r => r.status === 'fulfilled' && r.value.status === 'success').length;
     const failed = results.filter(r => r.status === 'rejected' || r.value.status === 'failed').length;
 
+    // Stop monitoring before logging results
+    stopMonitoring();
+
     console.log('\n=== Stress Test Results ===');
     console.log(`Total Requests: ${numRequests}`);
     console.log(`Successful: ${successful}`);
     console.log(`Failed: ${failed}`);
     console.log(`Total Time: ${totalTime.toFixed(2)} seconds`);
     console.log(`Average Time per Video: ${(totalTime / numRequests).toFixed(2)} seconds`);
+    console.log(`Transcription Segments per Video: ${transcriptionDetails.length}`);
 
     // Save results to file
     const resultLog = {
@@ -940,6 +982,7 @@ async function stressTest() {
       failed,
       totalTime,
       averageTime: totalTime / numRequests,
+      transcriptionSegments: transcriptionDetails.length,
       detailedResults: results.map(r => r.value || { status: 'rejected', error: r.reason })
     };
 
@@ -950,41 +993,31 @@ async function stressTest() {
 
     return resultLog;
   } catch (error) {
+    // Make sure to stop monitoring even if there's an error
+    stopMonitoring();
     console.error('Stress test failed:', error);
     throw error;
   }
 }
 
-// Add stress test option to main while preserving existing functionality
-const originalMain = main;
-async function main() {
-  const args = process.argv.slice(2);
-  if (args.includes('--stress-test')) {
-    console.log('Running stress test...');
-    await stressTest();
-  } else {
-    await originalMain();
-  }
-}
-
-// Self-executing main function
+// Self-executing main function for stress test
 if (require.main === module) {
-  console.log('Starting process...');
-  main()
+  console.log('Starting stress test process...');
+  stressTest()
     .then(() => {
-      console.log('Process completed successfully');
+      console.log('Stress test completed successfully');
       process.exit(0);
     })
     .catch((error) => {
-      console.error('Error in execution:', error);
+      console.error('Error in stress test execution:', error);
       process.exit(1);
     });
 }
 
-// Add stress test to exports while keeping existing exports
-module.exports = { ...module.exports, stressTest };
+// Update exports
+module.exports = { ...module.exports, getAvailableRAM, getCPUUsage, monitorResources };
 
-// RAM monitoring and throttling functions
+// RAM monitoring function
 async function getAvailableRAM() {
   try {
     const si = require('systeminformation');
@@ -996,52 +1029,17 @@ async function getAvailableRAM() {
     };
   } catch (error) {
     console.error('Error getting RAM info:', error);
-    return null;
+    // Fallback to process.memoryUsage() if systeminformation fails
+    const usage = process.memoryUsage();
+    return {
+      total: os.totalmem(),
+      available: os.freemem(),
+      percentAvailable: (os.freemem() / os.totalmem()) * 100
+    };
   }
 }
 
-async function waitForAvailableRAM(minimumRAMPercent = 20, maxWaitTime = 300000) {
-  const startTime = Date.now();
-  let waitTime = 5000; // Start with 5 second wait
-
-  while (true) {
-    const ram = await getAvailableRAM();
-    if (!ram) return true; // Proceed if we can't get RAM info
-
-    console.log(`Available RAM: ${(ram.available / 1024 / 1024 / 1024).toFixed(2)}GB (${ram.percentAvailable.toFixed(2)}%)`);
-
-    if (ram.percentAvailable >= minimumRAMPercent) {
-      return true;
-    }
-
-    if (Date.now() - startTime > maxWaitTime) {
-      console.warn('Maximum wait time exceeded, proceeding anyway');
-      return false;
-    }
-
-    console.log(`RAM usage high, waiting ${waitTime/1000} seconds...`);
-    await new Promise(resolve => setTimeout(resolve, waitTime));
-    waitTime = Math.min(waitTime * 1.5, 30000); // Increase wait time up to 30 seconds
-  }
-}
-
-// Modify generateVideo to include RAM check without changing existing code
-const originalGenerateVideo = generateVideo;
-async function generateVideo(text, language = 'en', style = 'style_1', options = {}) {
-  try {
-    // Check RAM availability before processing
-    console.log('Checking system resources...');
-    await waitForAvailableRAM();
-    
-    // Call original function
-    return await originalGenerateVideo(text, language, style, options);
-  } catch (error) {
-    console.error('Error in RAM-aware generateVideo:', error);
-    throw error;
-  }
-}
-
-// Add CPU monitoring
+// CPU monitoring function
 async function getCPUUsage() {
   try {
     const si = require('systeminformation');
@@ -1053,43 +1051,12 @@ async function getCPUUsage() {
     };
   } catch (error) {
     console.error('Error getting CPU info:', error);
-    return null;
+    // Fallback to os.loadavg() if systeminformation fails
+    const [oneMin, fiveMin, fifteenMin] = os.loadavg();
+    return {
+      total: oneMin * 100,
+      user: oneMin * 75, // Estimate
+      system: oneMin * 25 // Estimate
+    };
   }
 }
-
-// Monitor system resources during stress test
-async function monitorResources(interval = 5000) {
-  const monitoring = setInterval(async () => {
-    const ram = await getAvailableRAM();
-    const cpu = await getCPUUsage();
-    
-    console.log('\n=== System Resources ===');
-    if (ram) {
-      console.log(`RAM Available: ${(ram.available / 1024 / 1024 / 1024).toFixed(2)}GB (${ram.percentAvailable.toFixed(2)}%)`);
-    }
-    if (cpu) {
-      console.log(`CPU Usage: ${cpu.total.toFixed(2)}% (User: ${cpu.user.toFixed(2)}%, System: ${cpu.system.toFixed(2)}%)`);
-    }
-  }, interval);
-
-  return () => clearInterval(monitoring);
-}
-
-// Enhance stress test with resource monitoring
-const originalStressTest = stressTest;
-async function stressTest() {
-  console.log('Starting resource monitoring...');
-  const stopMonitoring = await monitorResources();
-  
-  try {
-    const result = await originalStressTest();
-    stopMonitoring();
-    return result;
-  } catch (error) {
-    stopMonitoring();
-    throw error;
-  }
-}
-
-// Update exports
-module.exports = { ...module.exports, getAvailableRAM, getCPUUsage, monitorResources };
