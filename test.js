@@ -480,7 +480,9 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-shortest',
           '-async', '1',
           '-vsync', '1',
-          '-max_interleave_delta', '0'
+          '-max_interleave_delta', '0',
+          '-strict', '-2',
+          '-scodec', 'copy'
         ];
 
         // Modify output options based on compression setting
@@ -878,108 +880,3 @@ async function mixAudioWithBackgroundMusic(voiceoverPath, bgMusicPath, outputPat
       .run();
   });
 }
-
-// Add at the very end of the file, after all existing code
-
-// Stress test function
-async function stressTest() {
-  const testText = "This is a test video for stress testing our video generation system. We want to see how many parallel requests we can handle.";
-  const numRequests = 50;
-  const startTime = Date.now();
-
-  console.log(`Starting stress test with ${numRequests} parallel requests...`);
-
-  try {
-    const promises = Array(numRequests).fill().map(async (_, index) => {
-      const language = ['en', 'hi', 'ar', 'fr'][index % 4];
-      const style = ['style_1', 'style_2', 'style_3', 'style_4'][index % 4];
-      
-      try {
-        console.log(`Starting request ${index + 1}: ${language}, ${style}`);
-        const videoUrl = await generateVideo(testText, language, style);
-        
-        return {
-          requestId: index + 1,
-          language,
-          style,
-          status: 'success',
-          url: videoUrl,
-          timestamp: new Date().toISOString()
-        };
-      } catch (error) {
-        console.error(`Error in request ${index + 1}:`, error.message);
-        return {
-          requestId: index + 1,
-          language,
-          style,
-          status: 'failed',
-          error: error.message,
-          timestamp: new Date().toISOString()
-        };
-      }
-    });
-
-    const results = await Promise.allSettled(promises);
-    const endTime = Date.now();
-    const totalTime = (endTime - startTime) / 1000;
-    const successful = results.filter(r => r.status === 'fulfilled' && r.value.status === 'success').length;
-    const failed = results.filter(r => r.status === 'rejected' || r.value.status === 'failed').length;
-
-    console.log('\n=== Stress Test Results ===');
-    console.log(`Total Requests: ${numRequests}`);
-    console.log(`Successful: ${successful}`);
-    console.log(`Failed: ${failed}`);
-    console.log(`Total Time: ${totalTime.toFixed(2)} seconds`);
-    console.log(`Average Time per Video: ${(totalTime / numRequests).toFixed(2)} seconds`);
-
-    // Save results to file
-    const resultLog = {
-      timestamp: new Date().toISOString(),
-      totalRequests: numRequests,
-      successful,
-      failed,
-      totalTime,
-      averageTime: totalTime / numRequests,
-      detailedResults: results.map(r => r.value || { status: 'rejected', error: r.reason })
-    };
-
-    await fsp.writeFile(
-      path.join(__dirname, 'stress_test_results.json'),
-      JSON.stringify(resultLog, null, 2)
-    );
-
-    return resultLog;
-  } catch (error) {
-    console.error('Stress test failed:', error);
-    throw error;
-  }
-}
-
-// Add stress test option to main while preserving existing functionality
-const originalMain = main;
-async function main() {
-  const args = process.argv.slice(2);
-  if (args.includes('--stress-test')) {
-    console.log('Running stress test...');
-    await stressTest();
-  } else {
-    await originalMain();
-  }
-}
-
-// Self-executing main function
-if (require.main === module) {
-  console.log('Starting process...');
-  main()
-    .then(() => {
-      console.log('Process completed successfully');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('Error in execution:', error);
-      process.exit(1);
-    });
-}
-
-// Add stress test to exports while keeping existing exports
-module.exports = { ...module.exports, stressTest };
