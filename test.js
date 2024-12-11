@@ -5,6 +5,7 @@ const path = require('path');
 const https = require('https');
 const http = require('http');
 const axios = require('axios');
+const AWS = require('aws-sdk');
 
 // Define the animation style at the top of the file
 const animation_style = "style_1"; // Statically set the animation style
@@ -538,7 +539,52 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     // Store API requirements after successful video generation
     await storeAPIRequirements(language, style, apiData, outputPath, fontPath, totalVideoDuration);
 
-    return outputPath;
+    // After video generation is complete, upload to S3
+    try {
+      // Construct the correct video path
+      const videoPath = path.join('/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
+      console.log('Video file path for upload:', videoPath);
+      
+      if (!fs.existsSync(videoPath)) {
+        throw new Error(`Video file not found at path: ${videoPath}`);
+      }
+
+      const s3 = new AWS.S3({
+        accessKeyId: "AKIATTSKFTHDBRHTB2PX",
+        secretAccessKey: "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"
+      });
+
+      const random_id = Math.floor(Math.random() * Date.now());
+      // Include more details in S3 key for better organization
+      const s3Key = `video_file/api/${style}/video-${language}-${style}-${random_id}.mp4`;
+
+      console.log('Reading video file for S3 upload...');
+      const fileContent = await fsp.readFile(videoPath);
+      console.log('File size:', fileContent.length, 'bytes');
+      
+      console.log('Starting S3 upload with key:', s3Key);
+      const uploadResult = await s3.upload({
+        Bucket: "video-store-24",
+        Key: s3Key,
+        Body: fileContent,
+        ACL: "public-read",
+        ContentType: 'video/mp4'
+      }).promise();
+
+      console.log('Video uploaded successfully to:', uploadResult.Location);
+
+      // Clean up local file after successful upload
+      await fsp.unlink(videoPath).catch(console.error);
+      console.log('Local video file deleted');
+
+      return uploadResult.Location;
+    } catch (s3Error) {
+      console.error('Error uploading to S3:', s3Error);
+      const videoPath = path.join('/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
+      console.log('Local video path:', videoPath);
+      return videoPath;
+    }
+
   } catch (error) {
     console.error(`Error in generateVideo for ${language}, ${style}:`, error.message);
     if (error.response && error.response.data) {
@@ -745,8 +791,8 @@ async function main() {
     for (const style of styles) {
       try {
         console.log(`\n--- Generating video for language: ${lang}, style: ${style} ---`);
-        const outputPath = await generateVideo(sampleText, lang, style);
-        console.log(`Video created successfully for ${lang}, ${style}: ${outputPath}`);
+        const videoUrl = await generateVideo(sampleText, lang, style);
+        console.log(`Video created and uploaded successfully for ${lang}, ${style}: ${videoUrl}`);
       } catch (err) {
         console.error(`Error creating video for ${lang}, ${style}:`, err.message);
         console.log(`Skipping to next combination...\n`);
@@ -834,4 +880,3 @@ async function mixAudioWithBackgroundMusic(voiceoverPath, bgMusicPath, outputPat
       .run();
   });
 }
-
