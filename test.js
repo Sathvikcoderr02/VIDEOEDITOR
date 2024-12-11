@@ -778,30 +778,99 @@ async function storeAPIRequirements(language, style, apiData, outputPath, fontPa
   }
 }
 
-// Update the main execution
-async function main() {
-  const sampleText = "Guys, welcome back to our YouTube channel. Fact, friends, today we're going to talk about whether we can actually time travel, go to the past or future. I know you all have these questions. Let's discuss all this in detail. Before going into the video, please like, share and subscribe to our YouTube channel, friends. Before knowing about time travel, let's first know about time. Where the gravitational force is high, time passes slower. And to do this experiment, two scientists came together for a time mission. That time mission is not like the one shown in movies. It's just a time mission that calculates accurate time. And they took two of these. One was placed in an airplane and the other on Earth. After one round, we could clearly see the time difference in both devices. So, what we clearly understand here is that where the gravitational force is high, time passes a little slower. So this is about time. Now you can understand that everyone has the same understanding of time.";
+// Add stress test function at the end of the file, after all existing code
+async function stressTest() {
+  const testText = "This is a test video for stress testing our video generation system. We want to see how many parallel requests we can handle.";
+  const numRequests = 50;
+  const startTime = Date.now();
 
-  const languages = ['en','te', 'hi', 'ar', 'fr'];
-  const styles = ['style_1', 'style_2', 'style_3', 'style_4'];
+  console.log(`Starting stress test with ${numRequests} parallel requests...`);
 
-  for (const lang of languages) {
-    for (const style of styles) {
+  try {
+    // Create array of promises for parallel execution
+    const promises = Array(numRequests).fill().map(async (_, index) => {
+      const language = ['en', 'hi', 'ar', 'fr'][index % 4];
+      const style = ['style_1', 'style_2', 'style_3', 'style_4'][index % 4];
+      
       try {
-        console.log(`\n--- Generating video for language: ${lang}, style: ${style} ---`);
-        const videoUrl = await generateVideo(sampleText, lang, style);
-        console.log(`Video created and uploaded successfully for ${lang}, ${style}: ${videoUrl}`);
-      } catch (err) {
-        console.error(`Error creating video for ${lang}, ${style}:`, err.message);
-        console.log(`Skipping to next combination...\n`);
+        console.log(`Starting request ${index + 1}: ${language}, ${style}`);
+        const videoUrl = await generateVideo(testText, language, style);
+        
+        return {
+          requestId: index + 1,
+          language,
+          style,
+          status: 'success',
+          url: videoUrl,
+          timestamp: new Date().toISOString()
+        };
+      } catch (error) {
+        console.error(`Error in request ${index + 1}:`, error.message);
+        return {
+          requestId: index + 1,
+          language,
+          style,
+          status: 'failed',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        };
       }
-    }
+    });
+
+    // Wait for all promises to resolve
+    const results = await Promise.allSettled(promises);
+
+    // Calculate statistics
+    const endTime = Date.now();
+    const totalTime = (endTime - startTime) / 1000;
+    const successful = results.filter(r => r.status === 'fulfilled' && r.value.status === 'success').length;
+    const failed = results.filter(r => r.status === 'rejected' || r.value.status === 'failed').length;
+
+    // Log results
+    console.log('\n=== Stress Test Results ===');
+    console.log(`Total Requests: ${numRequests}`);
+    console.log(`Successful: ${successful}`);
+    console.log(`Failed: ${failed}`);
+    console.log(`Total Time: ${totalTime.toFixed(2)} seconds`);
+    console.log(`Average Time per Video: ${(totalTime / numRequests).toFixed(2)} seconds`);
+
+    // Write results to file
+    const resultLog = {
+      timestamp: new Date().toISOString(),
+      totalRequests: numRequests,
+      successful,
+      failed,
+      totalTime,
+      averageTime: totalTime / numRequests,
+      detailedResults: results.map(r => r.value || { status: 'rejected', error: r.reason })
+    };
+
+    await fsp.writeFile(
+      path.join(__dirname, 'stress_test_results.json'),
+      JSON.stringify(resultLog, null, 2)
+    );
+
+    return resultLog;
+  } catch (error) {
+    console.error('Stress test failed:', error);
+    throw error;
   }
 }
 
-main().then(() => process.exit(0)).catch(() => process.exit(1));
+// Update the main function to include stress test option while keeping existing code
+const originalMain = main; // Store the original main function
+async function main() {
+  const args = process.argv.slice(2);
+  if (args.includes('--stress-test')) {
+    console.log('Running stress test...');
+    await stressTest();
+  } else {
+    await originalMain();
+  }
+}
 
-module.exports = { generateVideo };
+// Add stress test to exports while keeping existing exports
+module.exports = { ...module.exports, stressTest };
 
 function validateFilterComplex(filterComplex) {
   // Check for common syntax errors
