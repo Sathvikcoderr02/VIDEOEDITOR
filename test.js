@@ -541,8 +541,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // After video generation is complete, upload to S3
     try {
-      // Construct the correct video path
-      const videoPath = path.join('/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
+      // Construct the correct video path with /root prefix
+      const videoPath = path.join('/root/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
       console.log('Video file path for upload:', videoPath);
       
       if (!fs.existsSync(videoPath)) {
@@ -555,7 +555,6 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       });
 
       const random_id = Math.floor(Math.random() * Date.now());
-      // Include more details in S3 key for better organization
       const s3Key = `video_file/api/${style}/video-${language}-${style}-${random_id}.mp4`;
 
       console.log('Reading video file for S3 upload...');
@@ -580,7 +579,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       return uploadResult.Location;
     } catch (s3Error) {
       console.error('Error uploading to S3:', s3Error);
-      const videoPath = path.join('/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
+      const videoPath = path.join('/root/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
       console.log('Local video path:', videoPath);
       return videoPath;
     }
