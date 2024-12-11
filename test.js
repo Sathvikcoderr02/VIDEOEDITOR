@@ -1130,3 +1130,90 @@ async function getCPUUsage() {
     };
   }
 }
+
+// Add these improved resource management functions
+async function checkResourcesWithBackoff(operation = 'Processing', attempts = 5) {
+  const minRAMPercent = 20;
+  const maxCPUPercent = 90;
+  let waitTime = 10000; // Start with 10 seconds
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const ram = await getAvailableRAM();
+    const cpu = await getCPUUsage();
+
+    console.log(`\n${operation} - Attempt ${attempt}/${attempts}`);
+    console.log(`RAM Available: ${ram.percentAvailable.toFixed(2)}%, CPU Usage: ${cpu.total.toFixed(2)}%`);
+
+    if (ram.percentAvailable >= minRAMPercent && cpu.total <= maxCPUPercent) {
+      return true;
+    }
+
+    if (attempt < attempts) {
+      console.log(`Resources constrained, waiting ${waitTime/1000}s before retry...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      waitTime *= 2; // Double the wait time for each attempt
+    }
+  }
+
+  console.warn(`${operation} - Resource check failed after ${attempts} attempts`);
+  return false;
+}
+
+// Add this to the stress test's batch processing
+async function processBatchWithRetry(batch, batchNumber, totalBatches) {
+  const maxRetries = 3;
+  
+  for (let retry = 1; retry <= maxRetries; retry++) {
+    try {
+      // Check resources before processing batch
+      const resourcesAvailable = await checkResourcesWithBackoff(
+        `Batch ${batchNumber}/${totalBatches}`,
+        5
+      );
+
+      if (!resourcesAvailable && retry < maxRetries) {
+        console.log(`Insufficient resources for batch ${batchNumber}, retry ${retry}/${maxRetries}`);
+        await new Promise(resolve => setTimeout(resolve, 30000 * retry)); // Increasing backoff
+        continue;
+      }
+
+      return await Promise.allSettled(batch);
+    } catch (error) {
+      if (retry === maxRetries) {
+        console.error(`Batch ${batchNumber} failed after ${maxRetries} retries:`, error);
+        throw error;
+      }
+      console.log(`Batch ${batchNumber} failed, retry ${retry}/${maxRetries}`);
+      await new Promise(resolve => setTimeout(resolve, 30000 * retry));
+    }
+  }
+}
+
+// Modify the batch processing in stressTest function
+const batchSize = 3; // Reduced batch size
+const results = [];
+
+for (let i = 0; i < promises.length; i += batchSize) {
+  const batch = promises.slice(i, i + batchSize);
+  const batchNumber = Math.floor(i/batchSize) + 1;
+  const totalBatches = Math.ceil(promises.length/batchSize);
+  
+  console.log(`\nProcessing batch ${batchNumber}/${totalBatches}`);
+  
+  try {
+    const batchResults = await processBatchWithRetry(batch, batchNumber, totalBatches);
+    results.push(...batchResults);
+    
+    // Add cooldown period between batches
+    if (i + batchSize < promises.length) {
+      console.log('Cooling down between batches...');
+      await new Promise(resolve => setTimeout(resolve, 15000));
+    }
+  } catch (error) {
+    console.error(`Error processing batch ${batchNumber}:`, error);
+    results.push(...batch.map(() => ({
+      status: 'rejected',
+      reason: error.message
+    })));
+  }
+}
