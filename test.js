@@ -157,7 +157,30 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
   return filterComplex;
 }
 
-// Modify the generateVideo function to include style_4
+// Add this function for mid-process resource checking
+async function checkResourcesMiddleStep(operation = 'Processing') {
+  const minRAMPercent = 20;
+  const maxWaitTime = 60000; // 1 minute max wait
+  let waitTime = 5000;
+  
+  while (true) {
+    const ram = await getAvailableRAM();
+    if (ram.percentAvailable >= minRAMPercent) {
+      return true;
+    }
+
+    console.log(`\n${operation} - RAM constrained (${ram.percentAvailable.toFixed(2)}%), waiting ${waitTime/1000}s...`);
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+    waitTime = Math.min(waitTime * 1.5, 30000);
+
+    if (waitTime >= maxWaitTime) {
+      console.warn(`${operation} - Proceeding despite low RAM after waiting`);
+      return false;
+    }
+  }
+}
+
+// Modify generateVideo to include resource checks at critical points
 async function generateVideo(text, language = 'en', style = 'style_1', options = {}) {
   try {
     if (!text || text.trim() === '') {
@@ -304,6 +327,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     await fsp.mkdir(outputDir, { recursive: true });
     console.log('Output directory created:', outputDir);
 
+    // Check resources before downloading assets
+    await checkResourcesMiddleStep('Asset Download');
     const videos = await Promise.all(video_details.map(async (asset, index) => {
       if (!asset.url) {
         console.warn(`Warning: Invalid URL for asset ${index}. Skipping.`);
@@ -506,8 +531,12 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           .on('start', function(commandLine) {
             console.log('Spawned FFmpeg with command:', commandLine);
           })
-          .on('progress', function(progress) {
+          .on('progress', async function(progress) {
             console.log('Processing: ' + progress.percent + '% done');
+            // Check resources during FFmpeg processing
+            if (progress.percent % 20 === 0) { // Check every 20% progress
+              await checkResourcesMiddleStep('FFmpeg Progress');
+            }
           })
           .on('stderr', function(stderrLine) {
             console.log('FFmpeg stderr:', stderrLine);
@@ -540,7 +569,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     // Store API requirements after successful video generation
     await storeAPIRequirements(language, style, apiData, outputPath, fontPath, totalVideoDuration);
 
-    // After video generation is complete, upload to S3
+    // Check resources before S3 upload
+    await checkResourcesMiddleStep('S3 Upload');
     try {
       // Construct the correct video path with /root prefix
       const videoPath = path.join('/root/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
@@ -585,6 +615,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       return videoPath;
     }
 
+    return outputPath;
   } catch (error) {
     console.error(`Error in generateVideo for ${language}, ${style}:`, error.message);
     if (error.response && error.response.data) {
@@ -784,7 +815,7 @@ async function storeAPIRequirements(language, style, apiData, outputPath, fontPa
 async function main() {
   const sampleText = "Guys, welcome back to our YouTube channel. Fact, friends, today we're going to talk about whether we can actually time travel, go to the past or future. I know you all have these questions. Let's discuss all this in detail. Before going into the video, please like, share and subscribe to our YouTube channel, friends. Before knowing about time travel, let's first know about time. Where the gravitational force is high, time passes slower. And to do this experiment, two scientists came together for a time mission. That time mission is not like the one shown in movies. It's just a time mission that calculates accurate time. And they took two of these. One was placed in an airplane and the other on Earth. After one round, we could clearly see the time difference in both devices. So, what we clearly understand here is that where the gravitational force is high, time passes a little slower. So this is about time. Now you can understand that everyone has the same understanding of time.";
 
-  const languages = ['en','te', 'hi', 'ar', 'fr'];
+  const languages = ['en', 'hi', 'ar', 'fr'];
   const styles = ['style_1', 'style_2', 'style_3', 'style_4'];
 
   for (const lang of languages) {
