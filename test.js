@@ -566,7 +566,6 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         Bucket: "video-store-24",
         Key: s3Key,
         Body: fileContent,
-        ACL: "public-read",
         ContentType: 'video/mp4'
       }).promise();
 
