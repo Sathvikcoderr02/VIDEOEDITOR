@@ -906,7 +906,33 @@ async function monitorResources(interval = 5000) {
   return () => { isMonitoring = false; };
 }
 
-// Stress test function with transcription details
+// Add these threshold functions before the stress test
+async function waitForResources(minRAMPercent = 20, maxCPUPercent = 90, maxWaitTime = 60000) {
+  const startTime = Date.now();
+  let waitTime = 5000; // Start with 5 second wait
+
+  while (true) {
+    const ram = await getAvailableRAM();
+    const cpu = await getCPUUsage();
+
+    console.log(`\nResource Check - RAM Available: ${ram.percentAvailable.toFixed(2)}%, CPU Usage: ${cpu.total.toFixed(2)}%`);
+
+    if (ram.percentAvailable >= minRAMPercent && cpu.total <= maxCPUPercent) {
+      return true;
+    }
+
+    if (Date.now() - startTime > maxWaitTime) {
+      console.warn('Maximum wait time exceeded, proceeding with caution');
+      return false;
+    }
+
+    console.log(`Resources constrained, waiting ${waitTime/1000}s...`);
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+    waitTime = Math.min(waitTime * 1.5, 30000); // Increase wait time up to 30s
+  }
+}
+
+// Modify the stress test's promise mapping to include resource checking
 async function stressTest() {
   const testText = "This is a test video for stress testing our video generation system. We want to see how many parallel requests we can handle. Testing multiple languages and styles in parallel to understand system performance and resource utilization.";
   const transcriptionDetails = generateTranscriptionDetails(testText);
@@ -925,6 +951,9 @@ async function stressTest() {
       const style = ['style_1', 'style_2', 'style_3', 'style_4'][index % 4];
       
       try {
+        // Wait for resources before starting each request
+        await waitForResources();
+        
         console.log(`Starting request ${index + 1}: ${language}, ${style}`);
         console.log(`Transcription segments for request ${index + 1}:`, transcriptionDetails.length);
         
@@ -957,7 +986,17 @@ async function stressTest() {
       }
     });
 
-    const results = await Promise.allSettled(promises);
+    // Process in smaller batches to prevent overwhelming the system
+    const batchSize = 5;
+    const results = [];
+    
+    for (let i = 0; i < promises.length; i += batchSize) {
+      const batch = promises.slice(i, i + batchSize);
+      console.log(`\nProcessing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(promises.length/batchSize)}`);
+      const batchResults = await Promise.allSettled(batch);
+      results.push(...batchResults);
+    }
+
     const endTime = Date.now();
     const totalTime = (endTime - startTime) / 1000;
     const successful = results.filter(r => r.status === 'fulfilled' && r.value.status === 'success').length;
