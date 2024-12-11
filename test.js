@@ -518,12 +518,11 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           })
           .on('end', async () => {
             console.log('Video processing finished');
-            // Clean up temporary files
+            // Clean up temporary files except subtitles
             for (const video of validVideos) {
               await fsp.unlink(video.path).catch(console.error);
             }
             await fsp.unlink(audioPath).catch(console.error);
-            await fsp.unlink(subtitlePath).catch(console.error);
             if (watermark) {
               await fsp.unlink(logoPath).catch(console.error);
             }
@@ -571,9 +570,10 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
       console.log('Video uploaded successfully to:', uploadResult.Location);
 
-      // Clean up local file after successful upload
+      // Clean up local files after successful upload
       await fsp.unlink(videoPath).catch(console.error);
-      console.log('Local video file deleted');
+      await fsp.unlink(subtitlePath).catch(console.error);
+      console.log('Local files deleted');
 
       return uploadResult.Location;
     } catch (s3Error) {
