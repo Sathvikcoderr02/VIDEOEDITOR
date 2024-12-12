@@ -538,6 +538,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-map', '[outv_final]',
           '-map', `${validVideos.length}:a`,
           '-c:v', 'libx264',
+          '-preset', 'medium',
+          '-threads', '2',
           '-c:a', 'aac',
           '-shortest',
           '-async', '1',
@@ -568,8 +570,14 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           })
           .on('progress', async function(progress) {
             console.log('Processing: ' + progress.percent + '% done');
-            // Check resources during FFmpeg processing
-            if (progress.percent % 20 === 0) { // Check every 20% progress
+            
+            // Check CPU usage every 5% progress
+            if (progress.percent % 5 === 0) {
+              await waitForCPU(90); // Wait if CPU > 90%
+            }
+            
+            // Existing resource checks
+            if (progress.percent % 20 === 0) {
               await checkResourcesMiddleStep('FFmpeg Progress');
             }
           })
@@ -1174,5 +1182,29 @@ async function getCPUUsage() {
       user: oneMin * 75, // Estimate
       system: oneMin * 25 // Estimate
     };
+  }
+}
+
+// Add CPU throttling function
+async function waitForCPU(maxCPUPercent = 90, maxWaitTime = 60000) {
+  const startTime = Date.now();
+  let waitTime = 5000;
+
+  while (true) {
+    const cpu = await getCPUUsage();
+    
+    if (cpu.total <= maxCPUPercent) {
+      return true;
+    }
+
+    console.log(`CPU usage too high (${cpu.total.toFixed(2)}%), waiting ${waitTime/1000}s...`);
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+    
+    if (Date.now() - startTime > maxWaitTime) {
+      console.warn('Maximum CPU wait time exceeded');
+      return false;
+    }
+    
+    waitTime = Math.min(waitTime * 1.5, 30000);
   }
 }
