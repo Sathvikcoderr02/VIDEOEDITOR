@@ -8,6 +8,8 @@ const axios = require('axios');
 const AWS = require('aws-sdk');
 const os = require('os');
 const si = require('systeminformation');
+const dotenv = require('dotenv');
+dotenv.config();
 
 // Define the animation style at the top of the file
 const animation_style = "style_1"; // Statically set the animation style
@@ -624,8 +626,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       }
 
       const s3 = new AWS.S3({
-        accessKeyId: "AKIATTSKFTHDBRHTB2PX",
-        secretAccessKey: "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"
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
       });
 
       const random_id = Math.floor(Math.random() * Date.now());
@@ -637,7 +639,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       
       console.log('Starting S3 upload with key:', s3Key);
       const uploadResult = await s3.upload({
-        Bucket: "video-store-24",
+        Bucket: process.env.AWS_BUCKET_NAME,
         Key: s3Key,
         Body: fileContent,
         ContentType: 'video/mp4'
