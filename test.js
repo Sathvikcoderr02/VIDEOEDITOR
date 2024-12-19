@@ -627,7 +627,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
       const s3 = new AWS.S3({
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+        secretAccessKey: decodeURIComponent(process.env.AWS_SECRET_ACCESS_KEY),
+        region: 'us-east-1'  // Add explicit region
       });
 
       const random_id = Math.floor(Math.random() * Date.now());
@@ -642,7 +643,12 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         Bucket: process.env.AWS_BUCKET_NAME,
         Key: s3Key,
         Body: fileContent,
-        ContentType: 'video/mp4'
+        ContentType: 'video/mp4',
+        ACL: 'public-read'  // Add ACL if bucket allows
+      }, {
+        // Add upload options
+        partSize: 10 * 1024 * 1024, // 10MB parts
+        queueSize: 1 // Reduce concurrent uploads
       }).promise();
 
       console.log('Video uploaded successfully to:', uploadResult.Location);
