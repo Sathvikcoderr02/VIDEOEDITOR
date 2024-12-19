@@ -624,44 +624,52 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     // Check resources before S3 upload
     await checkResourcesMiddleStep('S3 Upload');
     try {
-      // Construct the correct video path with /root prefix
+      // Verify file exists before attempting upload
       const videoPath = path.join('/root/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
-      console.log('Video file path for upload:', videoPath);
+      console.log('Checking video file:', videoPath);
       
-      if (!fs.existsSync(videoPath)) {
+      const fileExists = await verifyFile(videoPath);
+      if (!fileExists) {
         throw new Error(`Video file not found at path: ${videoPath}`);
       }
 
-      const s3 = new AWS.S3({
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-        region: process.env.AWS_REGION || 'us-east-1',
-        signatureVersion: 'v4',
-        correctClockSkew: true
-      });
+      // Read file content only if file exists
+      console.log('Reading video file for S3 upload...');
+      const fileContent = await fsp.readFile(videoPath);
+      console.log('File content read successfully, size:', fileContent.length, 'bytes');
 
       const random_id = Math.floor(Math.random() * Date.now());
       const s3Key = `video_file/api/${style}/video-${language}-${style}-${random_id}.mp4`;
 
-      console.log('Reading video file for S3 upload...');
-      const fileContent = await fsp.readFile(videoPath);
-      console.log('File size:', fileContent.length, 'bytes');
-      
       console.log('Starting S3 upload with key:', s3Key);
-      const uploadResult = await uploadToS3(fileContent, s3Key);
+      console.log('Using AWS credentials:', {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'Present' : 'Missing',
+        secretKey: process.env.AWS_SECRET_ACCESS_KEY ? 'Present' : 'Missing',
+        bucket: process.env.AWS_BUCKET_NAME,
+        region: process.env.AWS_REGION
+      });
 
-      console.log('Video uploaded successfully to:', uploadResult.Location);
+      const uploadResult = await s3.upload({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: s3Key,
+        Body: fileContent,
+        ContentType: 'video/mp4'
+      }, {
+        partSize: 5 * 1024 * 1024,
+        queueSize: 1
+      }).promise();
 
-      // Clean up local files after successful upload
+      console.log('Video uploaded successfully:', uploadResult.Location);
+
+      // Clean up local file after successful upload
       await fsp.unlink(videoPath).catch(console.error);
-      await fsp.unlink(subtitlePath).catch(console.error);
-      console.log('Local files deleted');
+      console.log('Local video file deleted');
 
       return uploadResult.Location;
-    } catch (s3Error) {
-      console.error('Error uploading to S3:', s3Error);
+    } catch (error) {
+      console.error('Error in S3 upload process:', error);
       const videoPath = path.join('/root/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
-      console.log('Local video path:', videoPath);
+      console.log('Falling back to local video path:', videoPath);
       return videoPath;
     }
 
@@ -1257,5 +1265,19 @@ async function uploadToS3(fileContent, s3Key) {
       statusCode: error.statusCode
     });
     throw error;
+  }
+}
+
+// Add this file check function
+async function verifyFile(filePath) {
+  try {
+    const stats = await fsp.stat(filePath);
+    console.log(`File verified: ${filePath}`);
+    console.log(`File size: ${stats.size} bytes`);
+    return true;
+  } catch (error) {
+    console.error(`File verification failed: ${filePath}`);
+    console.error(`Error: ${error.message}`);
+    return false;
   }
 }
