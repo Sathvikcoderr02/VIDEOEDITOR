@@ -9,7 +9,14 @@ const AWS = require('aws-sdk');
 const os = require('os');
 const si = require('systeminformation');
 const dotenv = require('dotenv');
-dotenv.config();
+dotenv.config({ path: path.join('/root/VIDEOEDITOR', '.env') });
+
+console.log('Environment variables loaded:', {
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'Present' : 'Missing',
+  secretKey: process.env.AWS_SECRET_ACCESS_KEY ? 'Present' : 'Missing',
+  bucket: process.env.AWS_BUCKET_NAME,
+  region: process.env.AWS_REGION
+});
 
 // Define the animation style at the top of the file
 const animation_style = "style_1"; // Statically set the animation style
@@ -627,8 +634,10 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
       const s3 = new AWS.S3({
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: decodeURIComponent(process.env.AWS_SECRET_ACCESS_KEY),
-        region: 'us-east-1'  // Add explicit region
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        region: process.env.AWS_REGION || 'us-east-1',
+        signatureVersion: 'v4',
+        correctClockSkew: true
       });
 
       const random_id = Math.floor(Math.random() * Date.now());
@@ -639,17 +648,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       console.log('File size:', fileContent.length, 'bytes');
       
       console.log('Starting S3 upload with key:', s3Key);
-      const uploadResult = await s3.upload({
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: s3Key,
-        Body: fileContent,
-        ContentType: 'video/mp4',
-        ACL: 'public-read'  // Add ACL if bucket allows
-      }, {
-        // Add upload options
-        partSize: 10 * 1024 * 1024, // 10MB parts
-        queueSize: 1 // Reduce concurrent uploads
-      }).promise();
+      const uploadResult = await uploadToS3(fileContent, s3Key);
 
       console.log('Video uploaded successfully to:', uploadResult.Location);
 
@@ -1214,5 +1213,49 @@ async function waitForCPU(maxCPUPercent = 90, maxWaitTime = 60000) {
     }
     
     waitTime = Math.min(waitTime * 1.5, 30000);
+  }
+}
+
+// Update S3 configuration with proper error handling
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION || 'us-east-1',
+  signatureVersion: 'v4',
+  correctClockSkew: true
+});
+
+// Add S3 upload function with better error handling
+async function uploadToS3(fileContent, s3Key) {
+  try {
+    console.log('Starting S3 upload with credentials:', {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      bucket: process.env.AWS_BUCKET_NAME,
+      region: process.env.AWS_REGION
+    });
+
+    const uploadResult = await s3.upload({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: s3Key,
+      Body: fileContent,
+      ContentType: 'video/mp4',
+      ACL: 'public-read'
+    }, {
+      partSize: 5 * 1024 * 1024, // 5MB parts
+      queueSize: 1
+    }).promise();
+
+    console.log('S3 upload successful:', uploadResult.Location);
+    return uploadResult;
+  } catch (error) {
+    console.error('S3 upload error details:', {
+      code: error.code,
+      message: error.message,
+      region: error.region,
+      time: error.time,
+      requestId: error.requestId,
+      statusCode: error.statusCode
+    });
+    throw error;
   }
 }
