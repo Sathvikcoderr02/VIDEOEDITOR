@@ -1077,6 +1077,7 @@ async function stressTest() {
         console.log(`\nCooling down for 30 seconds after failed request ${index + 1}...`);
         await new Promise(resolve => setTimeout(resolve, 30000));
         console.log(`Cooldown complete for failed request ${index + 1}`);
+
         
         return {
           requestId: index + 1,
@@ -1092,6 +1093,35 @@ async function stressTest() {
 
     // Process in smaller batches to prevent overwhelming the system
     const batchSize = 5;
+
+    const express = require('express');
+    const app = express();
+
+    app.post('/generate-video', async (req, res) => {
+      try {
+        const { text, language = 'en', style = 'style_1', transcriptionDetails } = req.body;
+
+        const videoUrl = await generateVideo(text, language, style, {
+          transcriptionDetails,
+          videoAssets: 'all'
+        });
+
+        res.json({
+          status: 'success',
+          url: videoUrl
+        });
+      } catch (error) {
+        console.error('Error in /generate-video endpoint:', error.message);
+        res.status(500).json({
+          status: 'error',
+          message: error.message
+        });
+      }
+    });
+
+    app.listen(80, () => {
+      console.log('Server is listening on port 80');
+    });
     const results = [];
     
     for (let i = 0; i < promises.length; i += batchSize) {
@@ -1285,73 +1315,3 @@ async function verifyFile(filePath) {
     return false;
   }
 }
-
-// Add middleware after imports
-app.use(express.json());
-
-// Add the new endpoint before the main() function
-/**
- * Video Generation API Endpoint
- * Method: POST
- * Path: /api/generate-video
- */
-app.post('/api/generate-video', async (req, res) => {
-    try {
-        const {
-            text,              // Required: Text content for video generation
-            language = 'en',   // Optional: Language code (en, hi, ar, fr)
-            style = 'style_1', // Optional: Animation style (style_1, style_2, style_3, style_4)
-            videoType,         // Optional: Video type (landscape, portrait, square)
-            duration,          // Optional: Duration in seconds
-            resolution,        // Optional: Video resolution (720p, 1080p)
-            compression,       // Optional: Compression level (studio, social_media, web)
-            showProgressBar,   // Optional: Show progress bar (true/false)
-            watermark,         // Optional: Add watermark (true/false)
-            colorText1,        // Optional: Primary text color
-            colorText2,        // Optional: Secondary text color
-            colorBg,          // Optional: Background color
-            positionY,        // Optional: Text vertical position
-            fontName          // Optional: Font name for style_3
-        } = req.body;
-
-        // Validate required parameters
-        if (!text) {
-            return res.status(400).json({ error: 'Text content is required' });
-        }
-
-        // Generate video using existing function
-        const videoUrl = await generateVideo(text, language, style, {
-            videoType,
-            duration,
-            resolution,
-            compression,
-            showProgressBar,
-            watermark,
-            colorText1,
-            colorText2,
-            colorBg,
-            positionY,
-            fontName
-        });
-
-        // Send response
-        res.json({
-            status: 'success',
-            message: 'Video generated successfully',
-            videoUrl,
-            requestParams: req.body
-        });
-
-    } catch (error) {
-        console.error('Error in video generation endpoint:', error);
-        res.status(500).json({ 
-            error: 'Video generation failed',
-            message: error.message
-        });
-    }
-});
-
-// Add server start after the endpoint
-app.listen(port, () => {
-    console.log(`Video generation server running on port ${port}`);
-});
