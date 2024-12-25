@@ -81,8 +81,10 @@ app.get('/health', (req, res) => {
 });
 
 // Start server
-app.listen(port, '0.0.0.0', () => {
-    console.log(`Video generation server running on port ${port}`);
+const HOST = '0.0.0.0';  // Listen on all network interfaces
+app.listen(port, HOST, () => {
+    console.log(`Video generation server running on ${HOST}:${port}`);
+    console.log('Server is ready to accept connections');
 });
 
 // Handle uncaught exceptions
