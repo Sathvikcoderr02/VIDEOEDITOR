@@ -453,13 +453,24 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       throw new Error(`Font file not found: ${fontPath}`);
     }
 
-    // Copy font file to temp directory to ensure FFmpeg can access it
-    const tempFontPath = path.join(tempDir, path.basename(fontPath));
-    await fsp.copyFile(fontPath, tempFontPath);
-    console.log(`Font file copied to temp directory: ${tempFontPath}`);
+    // Ensure font file is readable
+    try {
+      fs.accessSync(fontPath, fs.constants.R_OK);
+    } catch (err) {
+      console.error(`Font file is not readable: ${fontPath}`);
+      throw new Error(`Font file is not readable: ${fontPath}`);
+    }
 
-    // Update fontPath to use the temp copy
-    fontPath = tempFontPath;
+    // Copy font to a known location if needed
+    const tempFontPath = path.join(tempDir, path.basename(fontPath));
+    try {
+      await fsp.copyFile(fontPath, tempFontPath);
+      fontPath = tempFontPath;
+      console.log(`Font file copied to: ${fontPath}`);
+    } catch (err) {
+      console.error(`Failed to copy font file: ${err.message}`);
+      throw new Error(`Failed to prepare font file: ${err.message}`);
+    }
 
     const subtitlePath = path.join(tempDir, 'subtitles.ass');
     await createASSSubtitleFile(transcription_details, subtitlePath, no_of_words, font_size, animation, videoWidth, videoHeight, actualDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar);
@@ -531,69 +542,20 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           filterComplex += `${videoParts}concat=n=${validVideos.length}:v=1:a=0[outv];`;
         }
 
-        // Add font file to FFmpeg command
-        command.outputOptions([
-          '-vf', `subtitles=${subtitlePath}:force_style='Fontname=${fontName},Fontfile=${fontPath},FontSize=${font_size},PrimaryColour=&H${colorText1.slice(1)},OutlineColour=&H000000,BorderStyle=1'`,
-          '-c:v', 'libx264'
-        ]);
-
-        // Add compression settings based on the compression parameter
-        switch (compression) {
-          case "social_media":
-            command.outputOptions(['-crf', '23', '-preset', 'medium']);
-            break;
-          case "web":
-            command.outputOptions(['-crf', '28', '-preset', 'faster']);
-            break;
-          case "studio":
-          default:
-            command.outputOptions(['-crf', '18', '-preset', 'slow']);
-            break;
-        }
-
-        // Add remaining common output options
-        command.outputOptions([
-          '-c:a', 'aac',
-          '-shortest',
-          '-async', '1',
-          '-vsync', '1',
-          '-max_interleave_delta', '0'
-        ]);
-
-        // Add subtitles with proper font configuration
-        filterComplex += `[outv]subtitles=${subtitlePath}:force_style='FontName=${fontName},FontSize=${font_size},PrimaryColour=&H${colorText1.slice(1)},OutlineColour=&H000000,BorderStyle=1'[outv_sub];`;
-
-        // Add an additional subtitle filter for better compatibility
-        command.outputOptions([
-          '-vf', `subtitles=${subtitlePath}:force_style='Fontname=${fontName},FontSize=${font_size},PrimaryColour=&H${colorText1.slice(1)},OutlineColour=&H000000,BorderStyle=1'`,
-          '-c:v', 'libx264',
-          '-c:a', 'aac',
-          '-shortest',
-          '-async', '1',
-          '-vsync', '1',
-          '-max_interleave_delta', '0'
-        ]);
-
-        // Add progression bar if enabled
-        if (show_progression_bar) {
-          filterComplex += `color=c=${colorText2}:s=${videoWidth}x80[bar];`;
-          filterComplex += '[bar]split[bar1][bar2];';
-          filterComplex += '[bar1]trim=duration=' + totalVideoDuration + '[bar1];';
-          filterComplex += '[bar2]trim=duration=' + totalVideoDuration + ',geq='
-            + 'r=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
-            + 'g=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
-            + 'b=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
-            + '[colorbar];';
-          filterComplex += '[bar1][colorbar]overlay[progressbar];';
-          filterComplex += '[outv_sub][progressbar]overlay=0:0[outv_final]';
-        } else {
-          filterComplex += '[outv_sub]copy[outv_final]';
-        }
-
-        console.log("Full filterComplex:", filterComplex);
-
+        // Simplify FFmpeg command
         command
           .complexFilter(filterComplex)
+          .outputOptions([
+            '-map', '[outv_final]',
+            '-map', `${validVideos.length}:a`,
+            '-c:v', 'libx264',
+            '-c:a', 'aac',
+            '-shortest',
+            '-async', '1',
+            '-vsync', '1',
+            '-max_interleave_delta', '0',
+            '-vf', `subtitles=${subtitlePath}:force_style='Fontname=${fontName},Fontfile=${fontPath},FontSize=${font_size},PrimaryColour=&H${colorText1.slice(1)},OutlineColour=&H000000,BorderStyle=1'`
+          ])
           .output(outputPath)
           .on('start', function(commandLine) {
             console.log('Spawned FFmpeg with command:', commandLine);
