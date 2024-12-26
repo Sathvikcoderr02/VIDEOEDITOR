@@ -516,7 +516,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         // Add audio input
         command = command.input(extendedAudioPath);
 
-        // Comprehensive filter complex with subtitles and progression bar
+        // Hardcoded filter complex with fixed color values
         let filterComplex = '';
         filterComplex += `[0:v]zoompan=z='min(zoom+0.0015,1.5)':d=143:s=1920x1080,scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=25[v0];`;
         filterComplex += `[1:v]zoompan=z='if(lte(zoom,1.0),1.5,max(1.001,zoom-0.0015))':d=16:s=1920x1080,scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=25[v1];`;
@@ -528,20 +528,18 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         filterComplex += `[xf2][v3]xfade=transition=wipedown:duration=1:offset=8.760000228881836[xf3];`;
         filterComplex += `[xf3][v4]xfade=transition=circleclose:duration=1:offset=9.15999984741211[xf4];`;
 
-        // Add progression bar
-        filterComplex += `color=c=${colorText2}:s=1920x80[bar];`;
+        // Progression bar with fixed color values
+        filterComplex += `color=c=#8D33FF:s=1920x80[bar];`;
         filterComplex += `[bar]split[bar1][bar2];`;
         filterComplex += `[bar1]trim=duration=${totalVideoDuration}[bar1];`;
         filterComplex += `[bar2]trim=duration=${totalVideoDuration},geq=`
-          + `r='if(lt(X,W*T/${totalVideoDuration}),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + '):'`
-          + `g='if(lt(X,W*T/${totalVideoDuration}),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + '):'`
-          + `b='if(lt(X,W*T/${totalVideoDuration}),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')'`
+          + `r='if(lt(X,W*T/${totalVideoDuration}),169,51)':`
+          + `g='if(lt(X,W*T/${totalVideoDuration}),85,255)':`
+          + `b='if(lt(X,W*T/${totalVideoDuration}),247,87)'`
           + `[colorbar];`;
 
-        // Add subtitles with font configuration
+        // Subtitles and final composition
         filterComplex += `[xf4]subtitles=${subtitlePath}:force_style='Fontname=PoetsenOne,Fontfile=${fontPath},FontSize=127,PrimaryColour=&H000000,OutlineColour=&H000000,BorderStyle=1'[subtitled];`;
-
-        // Overlay progression bar
         filterComplex += `[subtitled][bar1][colorbar]overlay[outv_final];`;
 
         command
