@@ -43,15 +43,7 @@ app.post('/generate-video', async (req, res) => {
             });
         }
 
-        console.log('Starting video generation with parameters:', {
-            text,
-            language,
-            style,
-            transcription_format,
-            animation
-        });
-
-        // Generate video
+        // Generate video and get URL
         const videoPath = await generateVideo(text, language, style, {
             transcription_format,
             animation: animation === 'true'
@@ -94,4 +86,4 @@ process.on('uncaughtException', (error) => {
 
 process.on('unhandledRejection', (error) => {
     console.error('Unhandled Rejection:', error);
-}); 
+});
