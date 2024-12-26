@@ -516,6 +516,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         // Add audio input
         command = command.input(extendedAudioPath);
 
+        // Comprehensive filter complex with subtitles and progression bar
         let filterComplex = '';
         filterComplex += `[0:v]zoompan=z='min(zoom+0.0015,1.5)':d=143:s=1920x1080,scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=25[v0];`;
         filterComplex += `[1:v]zoompan=z='if(lte(zoom,1.0),1.5,max(1.001,zoom-0.0015))':d=16:s=1920x1080,scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=25[v1];`;
@@ -526,9 +527,23 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         filterComplex += `[xf1][v2]xfade=transition=slidedown:duration=1:offset=4.300000190734863[xf2];`;
         filterComplex += `[xf2][v3]xfade=transition=wipedown:duration=1:offset=8.760000228881836[xf3];`;
         filterComplex += `[xf3][v4]xfade=transition=circleclose:duration=1:offset=9.15999984741211[xf4];`;
-        filterComplex += `[xf4]subtitles=${subtitlePath}:force_style='Fontname=PoetsenOne,Fontfile=${fontPath},FontSize=127,PrimaryColour=&H000000,OutlineColour=&H000000,BorderStyle=1'[outv_final];`;
 
-        // Simplify FFmpeg command
+        // Add progression bar
+        filterComplex += `color=c=${colorText2}:s=1920x80[bar];`;
+        filterComplex += `[bar]split[bar1][bar2];`;
+        filterComplex += `[bar1]trim=duration=${totalVideoDuration}[bar1];`;
+        filterComplex += `[bar2]trim=duration=${totalVideoDuration},geq=`
+          + `r='if(lt(X,W*T/${totalVideoDuration}),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + '):'`
+          + `g='if(lt(X,W*T/${totalVideoDuration}),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + '):'`
+          + `b='if(lt(X,W*T/${totalVideoDuration}),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')'`
+          + `[colorbar];`;
+
+        // Add subtitles with font configuration
+        filterComplex += `[xf4]subtitles=${subtitlePath}:force_style='Fontname=PoetsenOne,Fontfile=${fontPath},FontSize=127,PrimaryColour=&H000000,OutlineColour=&H000000,BorderStyle=1'[subtitled];`;
+
+        // Overlay progression bar
+        filterComplex += `[subtitled][bar1][colorbar]overlay[outv_final];`;
+
         command
           .complexFilter(filterComplex)
           .outputOptions([
