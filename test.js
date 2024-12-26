@@ -703,78 +703,61 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
   let assContent = assHeader;
-  const barHeight = Math.round(videoHeight * 0.02); // 2% of video height
-  const centerY = video_type === "square" 
-    ? videoHeight / 2 
-    : (videoHeight * positionY) / 100;
+  const wordSpacing = font_size * 0.3; // Adjust spacing based on font size
+  const centerY = Math.floor(videoHeight * (positionY / 100));
 
-  // Adjust centerY to account for the progression bar
-  const adjustedCenterY = show_progression_bar 
-    ? Math.max(centerY, barHeight + font_size / 2) 
-    : centerY;
-
-  const centerX = videoWidth / 2;
-  const wordSpacing = 0.1;
-  const maxWidth = videoWidth - 20;
-
-  for (let segment of transcription_details) {
-    const startTime = formatASSTime(segment.start);
-    const endTime = formatASSTime(segment.end);
+  for (const segment of transcription_details) {
     const words = segment.text.split(' ');
+    const wordDuration = (segment.end - segment.start) / words.length;
 
     for (let i = 0; i < words.length; i += no_of_words) {
-      const slideWords = words.slice(i, i + no_of_words);
-      const slideText = slideWords.join(' ');
-      const slideDuration = (segment.end - segment.start) * (slideWords.length / words.length);
-      const slideStartTime = formatASSTime(segment.start + (i / words.length) * (segment.end - segment.start));
-      const slideEndTime = formatASSTime(Math.min(segment.start + ((i + slideWords.length) / words.length) * (segment.end - segment.start), segment.end));
+      const lineWords = words.slice(i, Math.min(i + no_of_words, words.length));
+      const lineStart = segment.start + (i * wordDuration);
+      const lineEnd = lineStart + (lineWords.length * wordDuration);
 
-      // Check if this is a segment that needs center alignment (at 1 second or 11 seconds)
-      const needsCenterAlign = (segment.start === 1 || segment.start === 11);
-
-      if (style === "style_2") {
+      if (style === 'style_2') {
+        // Style 2: Animated color change effect
         let lineContent = '';
-        slideWords.forEach((word, index) => {
-          const wordStart = segment.start + (i + index) * (segment.end - segment.start) / words.length;
-          const wordEnd = wordStart + (segment.end - segment.start) / words.length;
-          lineContent += `{\\k${Math.round((wordEnd - wordStart) * 100)}\\1c&HFFFFFF&\\3c&H000000&\\t(${formatASSTime(wordStart)},${formatASSTime(wordEnd)},\\1c&H00FFFF&)}${word} `;
+        lineWords.forEach((word, idx) => {
+          const wordStart = lineStart + (idx * wordDuration);
+          const wordEnd = wordStart + wordDuration;
+          lineContent += `{\\k${Math.round(wordDuration * 100)}\\1c&H${colorText1.slice(1)}&\\t(${Math.round(wordDuration * 100/2)},\\1c&H${colorText2.slice(1)}&)}${word} `;
         });
-
-        assContent += `Dialogue: 0,${slideStartTime},${slideEndTime},Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
+        assContent += `Dialogue: 0,${formatASSTime(lineStart)},${formatASSTime(lineEnd)},Default,,0,0,0,,{\\an5\\pos(${videoWidth/2},${centerY})}${lineContent.trim()}\n`;
       } else {
-        // Style_1 and Style_3 rendering logic
-        let totalWidth = slideWords.reduce((sum, word) => sum + getTextWidth(word, fontName, font_size), 0) 
-                         + (slideWords.length - 1) * wordSpacing;
-        let startX = needsCenterAlign ? centerX : (centerX - (totalWidth / 2));
-        let currentX = startX;
-        let currentY = adjustedCenterY;
+        // Style 1 and 3: Progressive word display with optional animation
+        const totalWidth = lineWords.reduce((sum, word) => sum + getTextWidth(word, fontName, font_size), 0) + 
+                          (lineWords.length - 1) * wordSpacing;
+        let currentX = (videoWidth - totalWidth) / 2;
 
-        for (let j = 0; j < slideWords.length; j++) {
-          const word = slideWords[j];
+        lineWords.forEach((word, idx) => {
+          const wordStart = lineStart + (idx * wordDuration);
+          const wordEnd = wordStart + wordDuration;
           const wordWidth = getTextWidth(word, fontName, font_size);
 
-          if (currentX + wordWidth > centerX + (videoWidth - 20) / 2) {
-            currentX = needsCenterAlign ? centerX - (totalWidth / 2) : startX;
-            currentY += font_size;
-          }
+          // Main word display
+          assContent += `Dialogue: 1,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${centerY})\\fad(200,200)}${word}\n`;
 
-          assContent += `Dialogue: 1,${slideStartTime},${slideEndTime},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1)}&}${word}\n`;
-
+          // Animation effect (if enabled)
           if (animation) {
-            const wordStart = formatASSTime(segment.start + (i + j) * slideDuration / slideWords.length);
-            const wordEnd = formatASSTime(segment.start + (i + j + 1) * slideDuration / slideWords.length);
-            assContent += `Dialogue: 0,${wordStart},${wordEnd},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1)}&\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
+            assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${centerY})\\bord0\\shad0\\c&H${colorBg.slice(1)}&\\alpha&H40&\\t(0,${Math.round(wordDuration * 1000)},\\alpha&HFF&)\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
           }
 
           currentX += wordWidth + wordSpacing;
-        }
+        });
       }
     }
   }
 
+  // Add progress bar if enabled
+  if (show_progression_bar) {
+    const barHeight = Math.round(videoHeight * 0.02);
+    const barY = videoHeight - barHeight - 10;
+    assContent += `Dialogue: 0,0,${formatASSTime(actualDuration)},Default,,0,0,0,,{\\an7\\pos(0,${barY})\\bord0\\shad0\\c&H${colorBg.slice(1)}&\\p1}m 0 0 l ${videoWidth} 0 ${videoWidth} ${barHeight} 0 ${barHeight}{\\p0}\n`;
+  }
+
   await fsp.writeFile(outputPath, assContent);
   console.log(`ASS subtitle file created at: ${outputPath}`);
-  console.log('Subtitle content preview:', assContent.substring(0, 500));
 }
 
 function getTextWidth(text, font, fontSize) {
@@ -928,19 +911,17 @@ function validateFilterComplex(filterComplex) {
   console.log('Filter complex validation passed');
 }
 
-// Add this function at the end of your file:
-
-function logFFmpegError(err, stdout, stderr) {
-  console.error('FFmpeg error:', err.message);
-  console.error('FFmpeg stdout:', stdout);
-  console.error('FFmpeg stderr:', stderr);
-  
-  // Log more details about the error
-  if (err.message.includes('Error reinitializing filters')) {
-    console.error('Filter reinitialization error. Check your filterComplex string.');
-  }
-  if (stderr.includes('Invalid argument')) {
-    console.error('Invalid argument error. Check your FFmpeg command options and filter arguments.');
+// Add this file check function
+async function verifyFile(filePath) {
+  try {
+    const stats = await fsp.stat(filePath);
+    console.log(`File verified: ${filePath}`);
+    console.log(`File size: ${stats.size} bytes`);
+    return true;
+  } catch (error) {
+    console.error(`File verification failed: ${filePath}`);
+    console.error(`Error: ${error.message}`);
+    return false;
   }
 }
 
@@ -1284,19 +1265,5 @@ async function uploadToS3(fileContent, s3Key) {
       statusCode: error.statusCode
     });
     throw error;
-  }
-}
-
-// Add this file check function
-async function verifyFile(filePath) {
-  try {
-    const stats = await fsp.stat(filePath);
-    console.log(`File verified: ${filePath}`);
-    console.log(`File size: ${stats.size} bytes`);
-    return true;
-  } catch (error) {
-    console.error(`File verification failed: ${filePath}`);
-    console.error(`Error: ${error.message}`);
-    return false;
   }
 }
