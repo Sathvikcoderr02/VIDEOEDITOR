@@ -517,30 +517,16 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         command = command.input(extendedAudioPath);
 
         let filterComplex = '';
-
-        if (style === 'style_4') {
-          filterComplex = addImageAnimationsStyle4(validVideos, videoWidth, videoHeight);
-        } else {
-          validVideos.forEach((video, i) => {
-            const segmentDuration = video.segmentDuration || video.duration;
-            let inputPart = '';
-            
-            if (video.assetType === 'image') {
-              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS,`;
-              const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
-              inputPart += `${effect},`;
-            } else {
-              inputPart = `[${i}:v]trim=duration=${segmentDuration},setpts=PTS-STARTPTS,`;
-            }
-            
-            filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
-                           `crop=${videoWidth}:${videoHeight},setsar=1,` +
-                           `trim=duration=${segmentDuration}[v${i}];`;
-          });
-
-          const videoParts = validVideos.map((_, i) => `[v${i}]`).join('');
-          filterComplex += `${videoParts}concat=n=${validVideos.length}:v=1:a=0[outv];`;
-        }
+        filterComplex += `[0:v]zoompan=z='min(zoom+0.0015,1.5)':d=143:s=1920x1080,scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=25[v0];`;
+        filterComplex += `[1:v]zoompan=z='if(lte(zoom,1.0),1.5,max(1.001,zoom-0.0015))':d=16:s=1920x1080,scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=25[v1];`;
+        filterComplex += `[2:v]zoompan=z='min(zoom+0.0015,1.5)':d=134:s=1920x1080,scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=25[v2];`;
+        filterComplex += `[3:v]zoompan=x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':z='zoom+0.002':d=12:s=1920x1080,scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=25[v3];`;
+        filterComplex += `[4:v]zoompan=z='if(lte(zoom,1.0),1.5,max(1.001,zoom-0.0015))':d=148:s=1920x1080,scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=25[v4];`;
+        filterComplex += `[v0][v1]xfade=transition=dissolve:duration=1:offset=3.760000228881836[xf1];`;
+        filterComplex += `[xf1][v2]xfade=transition=slidedown:duration=1:offset=4.300000190734863[xf2];`;
+        filterComplex += `[xf2][v3]xfade=transition=wipedown:duration=1:offset=8.760000228881836[xf3];`;
+        filterComplex += `[xf3][v4]xfade=transition=circleclose:duration=1:offset=9.15999984741211[xf4];`;
+        filterComplex += `[xf4]subtitles=${subtitlePath}:force_style='Fontname=PoetsenOne,Fontfile=${fontPath},FontSize=127,PrimaryColour=&H000000,OutlineColour=&H000000,BorderStyle=1'[outv_final];`;
 
         // Simplify FFmpeg command
         command
@@ -553,8 +539,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
             '-shortest',
             '-async', '1',
             '-vsync', '1',
-            '-max_interleave_delta', '0',
-            '-vf', `subtitles=${subtitlePath}:force_style='Fontname=${fontName},Fontfile=${fontPath},FontSize=${font_size},PrimaryColour=&H${colorText1.slice(1)},OutlineColour=&H000000,BorderStyle=1'`
+            '-max_interleave_delta', '0'
           ])
           .output(outputPath)
           .on('start', function(commandLine) {
@@ -626,8 +611,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
       console.log('Starting S3 upload with key:', s3Key);
       console.log('Using AWS credentials:', {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'Present' : 'Missing',
-        secretKey: process.env.AWS_SECRET_ACCESS_KEY ? 'Present' : 'Missing',
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretKey: process.env.AWS_SECRET_ACCESS_KEY,
         bucket: process.env.AWS_BUCKET_NAME,
         region: process.env.AWS_REGION
       });
