@@ -447,11 +447,19 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       fontName = 'PoetsenOne';
     }
 
-    // Verify that the font file exists
+    // Verify and prepare font file
     if (!fs.existsSync(fontPath)) {
       console.error(`Font file not found: ${fontPath}`);
       throw new Error(`Font file not found: ${fontPath}`);
     }
+
+    // Copy font file to temp directory to ensure FFmpeg can access it
+    const tempFontPath = path.join(tempDir, path.basename(fontPath));
+    await fsp.copyFile(fontPath, tempFontPath);
+    console.log(`Font file copied to temp directory: ${tempFontPath}`);
+
+    // Update fontPath to use the temp copy
+    fontPath = tempFontPath;
 
     const subtitlePath = path.join(tempDir, 'subtitles.ass');
     await createASSSubtitleFile(transcription_details, subtitlePath, no_of_words, font_size, animation, videoWidth, videoHeight, actualDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar);
@@ -500,10 +508,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         let filterComplex = '';
 
         if (style === 'style_4') {
-          // Use addImageAnimationsStyle4 for style_4
           filterComplex = addImageAnimationsStyle4(validVideos, videoWidth, videoHeight);
         } else {
-          // Existing code for other styles
           validVideos.forEach((video, i) => {
             const segmentDuration = video.segmentDuration || video.duration;
             let inputPart = '';
@@ -517,21 +523,60 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
             }
             
             filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
-                             `crop=${videoWidth}:${videoHeight},setsar=1,` +
-                             `trim=duration=${segmentDuration}[v${i}];`;
+                           `crop=${videoWidth}:${videoHeight},setsar=1,` +
+                           `trim=duration=${segmentDuration}[v${i}];`;
           });
 
-          // Concatenate all video parts for other styles
           const videoParts = validVideos.map((_, i) => `[v${i}]`).join('');
           filterComplex += `${videoParts}concat=n=${validVideos.length}:v=1:a=0[outv];`;
         }
 
-        // Add subtitles for all styles
-        filterComplex += `[outv]ass=${subtitlePath}[outv_sub];`;
+        // Add font file to FFmpeg command
+        command.outputOptions([
+          '-vf', `subtitles=${subtitlePath}:force_style='Fontname=${fontName},Fontfile=${fontPath},FontSize=${font_size},PrimaryColour=&H${colorText1.slice(1)},OutlineColour=&H000000,BorderStyle=1'`,
+          '-c:v', 'libx264'
+        ]);
 
-        // Add progression bar filter only if show_progression_bar is true
+        // Add compression settings based on the compression parameter
+        switch (compression) {
+          case "social_media":
+            command.outputOptions(['-crf', '23', '-preset', 'medium']);
+            break;
+          case "web":
+            command.outputOptions(['-crf', '28', '-preset', 'faster']);
+            break;
+          case "studio":
+          default:
+            command.outputOptions(['-crf', '18', '-preset', 'slow']);
+            break;
+        }
+
+        // Add remaining common output options
+        command.outputOptions([
+          '-c:a', 'aac',
+          '-shortest',
+          '-async', '1',
+          '-vsync', '1',
+          '-max_interleave_delta', '0'
+        ]);
+
+        // Add subtitles with proper font configuration
+        filterComplex += `[outv]subtitles=${subtitlePath}:force_style='FontName=${fontName},FontSize=${font_size},PrimaryColour=&H${colorText1.slice(1)},OutlineColour=&H000000,BorderStyle=1'[outv_sub];`;
+
+        // Add an additional subtitle filter for better compatibility
+        command.outputOptions([
+          '-vf', `subtitles=${subtitlePath}:force_style='Fontname=${fontName},FontSize=${font_size},PrimaryColour=&H${colorText1.slice(1)},OutlineColour=&H000000,BorderStyle=1'`,
+          '-c:v', 'libx264',
+          '-c:a', 'aac',
+          '-shortest',
+          '-async', '1',
+          '-vsync', '1',
+          '-max_interleave_delta', '0'
+        ]);
+
+        // Add progression bar if enabled
         if (show_progression_bar) {
-          filterComplex += 'color=c=' + colorText2 + ':s=' + videoWidth + 'x80[bar];';
+          filterComplex += `color=c=${colorText2}:s=${videoWidth}x80[bar];`;
           filterComplex += '[bar]split[bar1][bar2];';
           filterComplex += '[bar1]trim=duration=' + totalVideoDuration + '[bar1];';
           filterComplex += '[bar2]trim=duration=' + totalVideoDuration + ',geq='
@@ -547,36 +592,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
         console.log("Full filterComplex:", filterComplex);
 
-        let outputOptions = [
-          '-map', '[outv_final]',
-          '-map', `${validVideos.length}:a`,
-          '-c:v', 'libx264',
-          '-preset', 'medium',
-          '-threads', '2',
-          '-c:a', 'aac',
-          '-shortest',
-          '-async', '1',
-          '-vsync', '1',
-          '-max_interleave_delta', '0'
-        ];
-
-        // Modify output options based on compression setting
-        switch (compression) {
-          case "social_media":
-            outputOptions.push('-crf', '23');
-            break;
-          case "web":
-            outputOptions.push('-crf', '28');
-            break;
-          case "studio":
-          default:
-            outputOptions.push('-crf', '18');
-            break;
-        }
-
         command
           .complexFilter(filterComplex)
-          .outputOptions(outputOptions)
           .output(outputPath)
           .on('start', function(commandLine) {
             console.log('Spawned FFmpeg with command:', commandLine);
@@ -698,8 +715,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${fontName},${font_size},&H00${colorText1.slice(1)},&H00${colorText2.slice(1)},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
-Style: Animated,${fontName},${font_size},&H00${colorText1.slice(1)},&H00${colorText2.slice(1)},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Default,${fontName},${font_size},&H${colorText1.slice(1)},&H${colorText2.slice(1)},&H000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -707,78 +723,74 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
   let assContent = assHeader;
   const barHeight = Math.round(videoHeight * 0.02);
-  const centerY = video_type === "square" ? videoHeight / 2 : (videoHeight * positionY) / 100;
-  const adjustedCenterY = show_progression_bar ? Math.max(centerY, barHeight + font_size / 2) : centerY;
+  const centerY = video_type === "square" 
+    ? videoHeight / 2 
+    : (videoHeight * positionY) / 100;
+
+  const adjustedCenterY = show_progression_bar 
+    ? Math.max(centerY, barHeight + font_size / 2) 
+    : centerY;
+
   const centerX = videoWidth / 2;
   const wordSpacing = font_size * 0.2; // Dynamic word spacing based on font size
-  const maxWidth = videoWidth * 0.9; // 90% of video width for text
+  const maxWidth = videoWidth * 0.9; // Use 90% of video width
 
   for (let segment of transcription_details) {
     const startTime = formatASSTime(segment.start);
     const endTime = formatASSTime(segment.end);
     const words = segment.text.split(' ');
     const segmentDuration = segment.end - segment.start;
-    const wordDuration = segmentDuration / words.length;
 
     for (let i = 0; i < words.length; i += no_of_words) {
       const slideWords = words.slice(i, i + no_of_words);
       const slideText = slideWords.join(' ');
+      const slideDuration = segmentDuration * (slideWords.length / words.length);
       const slideStartTime = formatASSTime(segment.start + (i / words.length) * segmentDuration);
       const slideEndTime = formatASSTime(Math.min(segment.start + ((i + slideWords.length) / words.length) * segmentDuration, segment.end));
 
       if (style === "style_2") {
-        // Enhanced style_2 with smooth color transitions and fade effects
+        // Style 2: Color animation for each word
         let lineContent = '';
         slideWords.forEach((word, index) => {
-          const wordStart = segment.start + (i + index) * wordDuration;
-          const wordEnd = wordStart + wordDuration;
-          const fadeInDuration = Math.min(0.3, wordDuration / 3);
+          const wordStart = segment.start + (i + index) * segmentDuration / words.length;
+          const wordEnd = wordStart + segmentDuration / words.length;
+          const fadeInDuration = Math.min(0.3, (wordEnd - wordStart) / 3);
           
-          lineContent += `{\\k${Math.round(wordDuration * 100)}\\fad(${Math.round(fadeInDuration * 1000)},200)` +
-            `\\t(0,${Math.round(wordDuration * 1000)},\\1c&H${colorText2.slice(1)}&)}${word} `;
+          lineContent += `{\\k${Math.round((wordEnd - wordStart) * 100)}\\1c&H${colorText1.slice(1)}&\\3c&H000000&\\fad(${Math.round(fadeInDuration * 1000)},0)}${word} `;
         });
 
-        assContent += `Dialogue: 0,${slideStartTime},${slideEndTime},Animated,,0,0,0,,` +
-          `{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
-
-      } else if (style === "style_1" || style === "style_3") {
-        // Enhanced progressive word display with better positioning
+        assContent += `Dialogue: 0,${slideStartTime},${slideEndTime},Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
+      } else {
+        // Style 1 and 3: Progressive word reveal with background highlight
         let totalWidth = slideWords.reduce((sum, word) => sum + getTextWidth(word, fontName, font_size), 0) 
                          + (slideWords.length - 1) * wordSpacing;
         let startX = centerX - (totalWidth / 2);
         let currentX = startX;
-        let currentY = adjustedCenterY;
 
-        slideWords.forEach((word, j) => {
+        for (let j = 0; j < slideWords.length; j++) {
+          const word = slideWords[j];
           const wordWidth = getTextWidth(word, fontName, font_size);
-          const wordStartTime = formatASSTime(segment.start + (i + j) * wordDuration);
-          const wordEndTime = formatASSTime(segment.start + (i + j + 1) * wordDuration);
-          
-          if (currentX + wordWidth > centerX + maxWidth / 2) {
-            currentX = startX;
-            currentY += font_size * 1.2;
-          }
+          const wordStartTime = formatASSTime(segment.start + (i + j) * slideDuration / slideWords.length);
+          const wordEndTime = formatASSTime(segment.start + (i + j + 1) * slideDuration / slideWords.length);
+          const fadeInDuration = Math.min(0.3, slideDuration / slideWords.length / 2);
 
-          // Main text with fade-in effect
-          assContent += `Dialogue: 1,${wordStartTime},${wordEndTime},Default,,0,0,0,,` +
-            `{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\fad(200,200)}${word}\n`;
+          // Main text with fade-in
+          assContent += `Dialogue: 1,${wordStartTime},${slideEndTime},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${adjustedCenterY})\\fad(${Math.round(fadeInDuration * 1000)},0)}${word}\n`;
 
           if (animation) {
-            // Background highlight animation
-            assContent += `Dialogue: 0,${wordStartTime},${wordEndTime},Default,,0,0,0,,` +
-              `{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1)}&` +
-              `\\alpha&H40&\\t(0,200,\\alpha&H60&)\\t(200,${Math.round(wordDuration * 1000)},\\alpha&H40&)\\p1}` +
-              `m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
+            // Animated background highlight
+            assContent += `Dialogue: 0,${wordStartTime},${wordEndTime},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${adjustedCenterY})\\bord0\\shad0\\c&H${colorBg.slice(1)}&\\alpha&H40&\\t(0,${Math.round(fadeInDuration * 1000)},\\alpha&HFF&)\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
           }
 
           currentX += wordWidth + wordSpacing;
-        });
+        }
       }
     }
   }
 
   await fsp.writeFile(outputPath, assContent);
-  console.log(`Enhanced ASS subtitle file created at: ${outputPath}`);
+  console.log(`ASS subtitle file created at: ${outputPath}`);
+  console.log('Subtitle content preview:', assContent.substring(0, 500));
 }
 
 function getTextWidth(text, font, fontSize) {
@@ -998,180 +1010,6 @@ async function monitorResources(interval = 5000) {
 
   monitor();
   return () => { isMonitoring = false; };
-}
-
-// Add these threshold functions before the stress test
-async function waitForResources(minRAMPercent = 20, maxCPUPercent = 90, maxWaitTime = 60000) {
-  const startTime = Date.now();
-  let waitTime = 5000; // Start with 5 second wait
-
-  while (true) {
-    const ram = await getAvailableRAM();
-    const cpu = await getCPUUsage();
-
-    console.log(`\nResource Check - RAM Available: ${ram.percentAvailable.toFixed(2)}%, CPU Usage: ${cpu.total.toFixed(2)}%`);
-
-    if (ram.percentAvailable >= minRAMPercent && cpu.total <= maxCPUPercent) {
-      return true;
-    }
-
-    if (Date.now() - startTime > maxWaitTime) {
-      console.warn('Maximum wait time exceeded, proceeding with caution');
-      return false;
-    }
-
-    console.log(`Resources constrained, waiting ${waitTime/1000}s...`);
-    await new Promise(resolve => setTimeout(resolve, waitTime));
-    waitTime = Math.min(waitTime * 1.5, 30000); // Increase wait time up to 30s
-  }
-}
-
-// Modify the stress test's promise mapping to include resource checking
-async function stressTest() {
-  const testText = "This is a test video for stress testing our video generation system. We want to see how many parallel requests we can handle. Testing multiple languages and styles in parallel to understand system performance and resource utilization.";
-  const transcriptionDetails = generateTranscriptionDetails(testText);
-  const numRequests = 50;
-  const startTime = Date.now();
-
-  console.log(`Starting stress test with ${numRequests} parallel requests...`);
-  console.log('Generated transcription segments:', transcriptionDetails.length);
-  
-  // Start resource monitoring
-  const stopMonitoring = await monitorResources(5000);
-
-  try {
-    const promises = Array(numRequests).fill().map(async (_, index) => {
-      const language = ['en', 'hi', 'ar', 'fr'][index % 4];
-      const style = ['style_1', 'style_2', 'style_3', 'style_4'][index % 4];
-      
-      try {
-        // Wait for resources before starting each request
-        await waitForResources();
-        
-        console.log(`Starting request ${index + 1}: ${language}, ${style}`);
-        console.log(`Transcription segments for request ${index + 1}:`, transcriptionDetails.length);
-        
-        // Use transcription details in video generation
-        const videoUrl = await generateVideo(testText, language, style, {
-          transcriptionDetails,
-          videoAssets: 'all'
-        });
-
-        // Add 30-second cooldown after each video generation
-        console.log(`\nCooling down for 30 seconds after request ${index + 1}...`);
-        await new Promise(resolve => setTimeout(resolve, 30000));
-        console.log(`Cooldown complete for request ${index + 1}`);
-        
-        return {
-          requestId: index + 1,
-          language,
-          style,
-          status: 'success',
-          url: videoUrl,
-          segmentsProcessed: transcriptionDetails.length,
-          timestamp: new Date().toISOString()
-        };
-      } catch (error) {
-        console.error(`Error in request ${index + 1}:`, error.message);
-        
-        // Add 30-second cooldown even after failed attempts
-        console.log(`\nCooling down for 30 seconds after failed request ${index + 1}...`);
-        await new Promise(resolve => setTimeout(resolve, 30000));
-        console.log(`Cooldown complete for failed request ${index + 1}`);
-
-        
-        return {
-          requestId: index + 1,
-          language,
-          style,
-          status: 'failed',
-          error: error.message,
-          segmentsAttempted: transcriptionDetails.length,
-          timestamp: new Date().toISOString()
-        };
-      }
-    });
-
-    // Process in smaller batches to prevent overwhelming the system
-    const batchSize = 5;
-
-    const express = require('express');
-    const app = express();
-
-    app.post('/generate-video', async (req, res) => {
-      try {
-        const { text, language = 'en', style = 'style_1', transcriptionDetails } = req.body;
-
-        const videoUrl = await generateVideo(text, language, style, {
-          transcriptionDetails,
-          videoAssets: 'all'
-        });
-
-        res.json({
-          status: 'success',
-          url: videoUrl
-        });
-      } catch (error) {
-        console.error('Error in /generate-video endpoint:', error.message);
-        res.status(500).json({
-          status: 'error',
-          message: error.message
-        });
-      }
-    });
-
-    app.listen(80, () => {
-      console.log('Server is listening on port 80');
-    });
-    const results = [];
-    
-    for (let i = 0; i < promises.length; i += batchSize) {
-      const batch = promises.slice(i, i + batchSize);
-      console.log(`\nProcessing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(promises.length/batchSize)}`);
-      const batchResults = await Promise.allSettled(batch);
-      results.push(...batchResults);
-    }
-
-    const endTime = Date.now();
-    const totalTime = (endTime - startTime) / 1000;
-    const successful = results.filter(r => r.status === 'fulfilled' && r.value.status === 'success').length;
-    const failed = results.filter(r => r.status === 'rejected' || r.value.status === 'failed').length;
-
-    // Stop monitoring before logging results
-    stopMonitoring();
-
-    console.log('\n=== Stress Test Results ===');
-    console.log(`Total Requests: ${numRequests}`);
-    console.log(`Successful: ${successful}`);
-    console.log(`Failed: ${failed}`);
-    console.log(`Total Time: ${totalTime.toFixed(2)} seconds`);
-    console.log(`Average Time per Video: ${(totalTime / numRequests).toFixed(2)} seconds`);
-    console.log(`Transcription Segments per Video: ${transcriptionDetails.length}`);
-
-    // Save results to file
-    const resultLog = {
-      timestamp: new Date().toISOString(),
-      totalRequests: numRequests,
-      successful,
-      failed,
-      totalTime,
-      averageTime: totalTime / numRequests,
-      transcriptionSegments: transcriptionDetails.length,
-      detailedResults: results.map(r => r.value || { status: 'rejected', error: r.reason })
-    };
-
-    await fsp.writeFile(
-      path.join(__dirname, 'stress_test_results.json'),
-      JSON.stringify(resultLog, null, 2)
-    );
-
-    return resultLog;
-  } catch (error) {
-    // Make sure to stop monitoring even if there's an error
-    stopMonitoring();
-    console.error('Stress test failed:', error);
-    throw error;
-  }
 }
 
 // Update exports
