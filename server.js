@@ -1115,13 +1115,17 @@ if (require.main === module) {
     console.log('Language: en');
     console.log('Style: style_1');
     
-    generateVideo(sampleText, 'en', 'style_1', {
-        transcription_format: 'segment',
-        animation: true
-    }).then(videoUrl => {
-        console.log('Success! Video generated at:', videoUrl);
-    }).catch(error => {
-        console.error('Error generating video:', error);
-        process.exit(1);
-    });
+    // Use async IIFE to properly handle async/await
+    (async () => {
+        try {
+            const videoUrl = await generateVideo(sampleText, 'en', 'style_1', {
+                transcription_format: 'segment',
+                animation: true
+            });
+            console.log('Success! Video generated at:', videoUrl);
+        } catch (error) {
+            console.error('Error generating video:', error);
+            process.exit(1);
+        }
+    })();
 }
