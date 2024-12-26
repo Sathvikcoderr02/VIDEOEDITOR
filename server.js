@@ -1105,3 +1105,23 @@ async function uploadToS3(fileContent, s3Key) {
     throw error;
   }
 }
+
+// Add test execution code
+if (require.main === module) {
+    const sampleText = "Welcome to our video generation test. This is a sample text to demonstrate subtitles and animations.";
+    
+    console.log('Starting video generation...');
+    console.log('Text:', sampleText);
+    console.log('Language: en');
+    console.log('Style: style_1');
+    
+    generateVideo(sampleText, 'en', 'style_1', {
+        transcription_format: 'segment',
+        animation: true
+    }).then(videoUrl => {
+        console.log('Success! Video generated at:', videoUrl);
+    }).catch(error => {
+        console.error('Error generating video:', error);
+        process.exit(1);
+    });
+}
