@@ -894,8 +894,7 @@ async function main() {
   }
 }
 
-main().then(() => process.exit(0)).catch(() => process.exit(1));
-
+// Export only the generateVideo function
 module.exports = { generateVideo };
 
 function validateFilterComplex(filterComplex) {
@@ -1171,20 +1170,6 @@ async function stressTest() {
     console.error('Stress test failed:', error);
     throw error;
   }
-}
-
-// Self-executing main function for stress test
-if (require.main === module) {
-  console.log('Starting stress test process...');
-  stressTest()
-    .then(() => {
-      console.log('Stress test completed successfully');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('Error in stress test execution:', error);
-      process.exit(1);
-    });
 }
 
 // Update exports
