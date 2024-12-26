@@ -693,54 +693,82 @@ ScriptType: v4.00+
 PlayResX: ${videoWidth}
 PlayResY: ${videoHeight}
 Aspect Ratio: ${videoWidth}:${videoHeight}
+WrapStyle: 0
+ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${fontName},${font_size},&H00${colorText1.slice(1)},&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+Style: Default,${fontName},${font_size},&H00${colorText1.slice(1)},&H00${colorText2.slice(1)},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+Style: Animated,${fontName},${font_size},&H00${colorText1.slice(1)},&H00${colorText2.slice(1)},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
   let assContent = assHeader;
-  const wordSpacing = font_size * 0.3; // Adjust spacing based on font size
-  const centerY = Math.floor(videoHeight * (positionY / 100));
+  const barHeight = Math.round(videoHeight * 0.02);
+  const centerY = video_type === "square" ? videoHeight / 2 : (videoHeight * positionY) / 100;
+  const adjustedCenterY = show_progression_bar ? Math.max(centerY, barHeight + font_size / 2) : centerY;
+  const centerX = videoWidth / 2;
+  const wordSpacing = font_size * 0.2; // Dynamic word spacing based on font size
+  const maxWidth = videoWidth * 0.9; // 90% of video width for text
 
-  for (const segment of transcription_details) {
+  for (let segment of transcription_details) {
+    const startTime = formatASSTime(segment.start);
+    const endTime = formatASSTime(segment.end);
     const words = segment.text.split(' ');
-    const wordDuration = (segment.end - segment.start) / words.length;
+    const segmentDuration = segment.end - segment.start;
+    const wordDuration = segmentDuration / words.length;
 
     for (let i = 0; i < words.length; i += no_of_words) {
-      const lineWords = words.slice(i, Math.min(i + no_of_words, words.length));
-      const lineStart = segment.start + (i * wordDuration);
-      const lineEnd = lineStart + (lineWords.length * wordDuration);
+      const slideWords = words.slice(i, i + no_of_words);
+      const slideText = slideWords.join(' ');
+      const slideStartTime = formatASSTime(segment.start + (i / words.length) * segmentDuration);
+      const slideEndTime = formatASSTime(Math.min(segment.start + ((i + slideWords.length) / words.length) * segmentDuration, segment.end));
 
-      if (style === 'style_2') {
-        // Style 2: Animated color change effect
+      if (style === "style_2") {
+        // Enhanced style_2 with smooth color transitions and fade effects
         let lineContent = '';
-        lineWords.forEach((word, idx) => {
-          const wordStart = lineStart + (idx * wordDuration);
+        slideWords.forEach((word, index) => {
+          const wordStart = segment.start + (i + index) * wordDuration;
           const wordEnd = wordStart + wordDuration;
-          lineContent += `{\\k${Math.round(wordDuration * 100)}\\1c&H${colorText1.slice(1)}&\\t(${Math.round(wordDuration * 100/2)},\\1c&H${colorText2.slice(1)}&)}${word} `;
+          const fadeInDuration = Math.min(0.3, wordDuration / 3);
+          
+          lineContent += `{\\k${Math.round(wordDuration * 100)}\\fad(${Math.round(fadeInDuration * 1000)},200)` +
+            `\\t(0,${Math.round(wordDuration * 1000)},\\1c&H${colorText2.slice(1)}&)}${word} `;
         });
-        assContent += `Dialogue: 0,${formatASSTime(lineStart)},${formatASSTime(lineEnd)},Default,,0,0,0,,{\\an5\\pos(${videoWidth/2},${centerY})}${lineContent.trim()}\n`;
-      } else {
-        // Style 1 and 3: Progressive word display with optional animation
-        const totalWidth = lineWords.reduce((sum, word) => sum + getTextWidth(word, fontName, font_size), 0) + 
-                          (lineWords.length - 1) * wordSpacing;
-        let currentX = (videoWidth - totalWidth) / 2;
 
-        lineWords.forEach((word, idx) => {
-          const wordStart = lineStart + (idx * wordDuration);
-          const wordEnd = wordStart + wordDuration;
+        assContent += `Dialogue: 0,${slideStartTime},${slideEndTime},Animated,,0,0,0,,` +
+          `{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
+
+      } else if (style === "style_1" || style === "style_3") {
+        // Enhanced progressive word display with better positioning
+        let totalWidth = slideWords.reduce((sum, word) => sum + getTextWidth(word, fontName, font_size), 0) 
+                         + (slideWords.length - 1) * wordSpacing;
+        let startX = centerX - (totalWidth / 2);
+        let currentX = startX;
+        let currentY = adjustedCenterY;
+
+        slideWords.forEach((word, j) => {
           const wordWidth = getTextWidth(word, fontName, font_size);
+          const wordStartTime = formatASSTime(segment.start + (i + j) * wordDuration);
+          const wordEndTime = formatASSTime(segment.start + (i + j + 1) * wordDuration);
+          
+          if (currentX + wordWidth > centerX + maxWidth / 2) {
+            currentX = startX;
+            currentY += font_size * 1.2;
+          }
 
-          // Main word display
-          assContent += `Dialogue: 1,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${centerY})\\fad(200,200)}${word}\n`;
+          // Main text with fade-in effect
+          assContent += `Dialogue: 1,${wordStartTime},${wordEndTime},Default,,0,0,0,,` +
+            `{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\fad(200,200)}${word}\n`;
 
-          // Animation effect (if enabled)
           if (animation) {
-            assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${centerY})\\bord0\\shad0\\c&H${colorBg.slice(1)}&\\alpha&H40&\\t(0,${Math.round(wordDuration * 1000)},\\alpha&HFF&)\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
+            // Background highlight animation
+            assContent += `Dialogue: 0,${wordStartTime},${wordEndTime},Default,,0,0,0,,` +
+              `{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1)}&` +
+              `\\alpha&H40&\\t(0,200,\\alpha&H60&)\\t(200,${Math.round(wordDuration * 1000)},\\alpha&H40&)\\p1}` +
+              `m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
           }
 
           currentX += wordWidth + wordSpacing;
@@ -749,15 +777,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     }
   }
 
-  // Add progress bar if enabled
-  if (show_progression_bar) {
-    const barHeight = Math.round(videoHeight * 0.02);
-    const barY = videoHeight - barHeight - 10;
-    assContent += `Dialogue: 0,0,${formatASSTime(actualDuration)},Default,,0,0,0,,{\\an7\\pos(0,${barY})\\bord0\\shad0\\c&H${colorBg.slice(1)}&\\p1}m 0 0 l ${videoWidth} 0 ${videoWidth} ${barHeight} 0 ${barHeight}{\\p0}\n`;
-  }
-
   await fsp.writeFile(outputPath, assContent);
-  console.log(`ASS subtitle file created at: ${outputPath}`);
+  console.log(`Enhanced ASS subtitle file created at: ${outputPath}`);
 }
 
 function getTextWidth(text, font, fontSize) {
