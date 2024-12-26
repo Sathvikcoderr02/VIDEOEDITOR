@@ -506,7 +506,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         }
 
         // Add subtitles with proper font configuration
-        filterComplex += `[outv]ass='${subtitlePath.replace(/[\\]/g, '\\\\').replace(/[']/g, "\\'")}':fontsdir='${path.dirname(fontPath)}'[outv_sub];`;
+        filterComplex += `[outv]ass='${subtitlePath.replace(/[\\]/g, '\\\\').replace(/[']/g, "\\'")}':fontsdir='/usr/share/fonts/truetype'[outv_sub];`;
 
         // Add progression bar filter only if show_progression_bar is true
         if (show_progression_bar) {
@@ -535,9 +535,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-c:a', 'aac',
           '-shortest',
           '-async', '1',
-          '-vsync', '1',
-          '-max_interleave_delta', '0',
-          '-vf', `subtitles='${subtitlePath.replace(/[\\]/g, '\\\\').replace(/[']/g, "\\'")}':force_style='FontName=${path.basename(fontPath, '.ttf')}'`
+          '-fps_mode', 'cfr',
+          '-max_interleave_delta', '0'
         ];
 
         // Modify output options based on compression setting
