@@ -453,6 +453,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       throw new Error(`Font file not found: ${fontPath}`);
     }
 
+    // Create ASS subtitle file
     const subtitlePath = path.join(tempDir, 'subtitles.ass');
     await createASSSubtitleFile(transcription_details, subtitlePath, no_of_words, font_size, animation, videoWidth, videoHeight, actualDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar);
 
@@ -527,7 +528,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         }
 
         // Add subtitles for all styles
-        filterComplex += `[outv]subtitles=${subtitlePath}:force_style='Fontname=${fontName},Fontfile=${fontPath},FontSize=${font_size},PrimaryColour=&H${colorText1.slice(1)},OutlineColour=&H${colorText2.slice(1)},BorderStyle=1'[outv_sub];`;
+        filterComplex += `[outv]ass=${subtitlePath}[outv_sub];`;
 
         // Add progression bar filter only if show_progression_bar is true
         if (show_progression_bar) {
@@ -996,6 +997,180 @@ async function monitorResources(interval = 5000) {
 
   monitor();
   return () => { isMonitoring = false; };
+}
+
+// Add these threshold functions before the stress test
+async function waitForResources(minRAMPercent = 20, maxCPUPercent = 90, maxWaitTime = 60000) {
+  const startTime = Date.now();
+  let waitTime = 5000; // Start with 5 second wait
+
+  while (true) {
+    const ram = await getAvailableRAM();
+    const cpu = await getCPUUsage();
+
+    console.log(`\nResource Check - RAM Available: ${ram.percentAvailable.toFixed(2)}%, CPU Usage: ${cpu.total.toFixed(2)}%`);
+
+    if (ram.percentAvailable >= minRAMPercent && cpu.total <= maxCPUPercent) {
+      return true;
+    }
+
+    if (Date.now() - startTime > maxWaitTime) {
+      console.warn('Maximum wait time exceeded, proceeding with caution');
+      return false;
+    }
+
+    console.log(`Resources constrained, waiting ${waitTime/1000}s...`);
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+    waitTime = Math.min(waitTime * 1.5, 30000); // Increase wait time up to 30s
+  }
+}
+
+// Modify the stress test's promise mapping to include resource checking
+async function stressTest() {
+  const testText = "This is a test video for stress testing our video generation system. We want to see how many parallel requests we can handle. Testing multiple languages and styles in parallel to understand system performance and resource utilization.";
+  const transcriptionDetails = generateTranscriptionDetails(testText);
+  const numRequests = 50;
+  const startTime = Date.now();
+
+  console.log(`Starting stress test with ${numRequests} parallel requests...`);
+  console.log('Generated transcription segments:', transcriptionDetails.length);
+  
+  // Start resource monitoring
+  const stopMonitoring = await monitorResources(5000);
+
+  try {
+    const promises = Array(numRequests).fill().map(async (_, index) => {
+      const language = ['en', 'hi', 'ar', 'fr'][index % 4];
+      const style = ['style_1', 'style_2', 'style_3', 'style_4'][index % 4];
+      
+      try {
+        // Wait for resources before starting each request
+        await waitForResources();
+        
+        console.log(`Starting request ${index + 1}: ${language}, ${style}`);
+        console.log(`Transcription segments for request ${index + 1}:`, transcriptionDetails.length);
+        
+        // Use transcription details in video generation
+        const videoUrl = await generateVideo(testText, language, style, {
+          transcriptionDetails,
+          videoAssets: 'all'
+        });
+
+        // Add 30-second cooldown after each video generation
+        console.log(`\nCooling down for 30 seconds after request ${index + 1}...`);
+        await new Promise(resolve => setTimeout(resolve, 30000));
+        console.log(`Cooldown complete for request ${index + 1}`);
+        
+        return {
+          requestId: index + 1,
+          language,
+          style,
+          status: 'success',
+          url: videoUrl,
+          segmentsProcessed: transcriptionDetails.length,
+          timestamp: new Date().toISOString()
+        };
+      } catch (error) {
+        console.error(`Error in request ${index + 1}:`, error.message);
+        
+        // Add 30-second cooldown even after failed attempts
+        console.log(`\nCooling down for 30 seconds after failed request ${index + 1}...`);
+        await new Promise(resolve => setTimeout(resolve, 30000));
+        console.log(`Cooldown complete for failed request ${index + 1}`);
+
+        
+        return {
+          requestId: index + 1,
+          language,
+          style,
+          status: 'failed',
+          error: error.message,
+          segmentsAttempted: transcriptionDetails.length,
+          timestamp: new Date().toISOString()
+        };
+      }
+    });
+
+    // Process in smaller batches to prevent overwhelming the system
+    const batchSize = 5;
+
+    const express = require('express');
+    const app = express();
+
+    app.post('/generate-video', async (req, res) => {
+      try {
+        const { text, language = 'en', style = 'style_1', transcriptionDetails } = req.body;
+
+        const videoUrl = await generateVideo(text, language, style, {
+          transcriptionDetails,
+          videoAssets: 'all'
+        });
+
+        res.json({
+          status: 'success',
+          url: videoUrl
+        });
+      } catch (error) {
+        console.error('Error in /generate-video endpoint:', error.message);
+        res.status(500).json({
+          status: 'error',
+          message: error.message
+        });
+      }
+    });
+
+    app.listen(80, () => {
+      console.log('Server is listening on port 80');
+    });
+    const results = [];
+    
+    for (let i = 0; i < promises.length; i += batchSize) {
+      const batch = promises.slice(i, i + batchSize);
+      console.log(`\nProcessing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(promises.length/batchSize)}`);
+      const batchResults = await Promise.allSettled(batch);
+      results.push(...batchResults);
+    }
+
+    const endTime = Date.now();
+    const totalTime = (endTime - startTime) / 1000;
+    const successful = results.filter(r => r.status === 'fulfilled' && r.value.status === 'success').length;
+    const failed = results.filter(r => r.status === 'rejected' || r.value.status === 'failed').length;
+
+    // Stop monitoring before logging results
+    stopMonitoring();
+
+    console.log('\n=== Stress Test Results ===');
+    console.log(`Total Requests: ${numRequests}`);
+    console.log(`Successful: ${successful}`);
+    console.log(`Failed: ${failed}`);
+    console.log(`Total Time: ${totalTime.toFixed(2)} seconds`);
+    console.log(`Average Time per Video: ${(totalTime / numRequests).toFixed(2)} seconds`);
+    console.log(`Transcription Segments per Video: ${transcriptionDetails.length}`);
+
+    // Save results to file
+    const resultLog = {
+      timestamp: new Date().toISOString(),
+      totalRequests: numRequests,
+      successful,
+      failed,
+      totalTime,
+      averageTime: totalTime / numRequests,
+      transcriptionSegments: transcriptionDetails.length,
+      detailedResults: results.map(r => r.value || { status: 'rejected', error: r.reason })
+    };
+
+    await fsp.writeFile(
+      path.join(__dirname, 'stress_test_results.json'),
+      JSON.stringify(resultLog, null, 2)
+    );
+
+    return resultLog;
+  } catch (error) {
+    // Make sure to stop monitoring even if there's an error
+    stopMonitoring();
+    console.error('Stress test failed:', error);
+    throw error;
+  }
 }
 
 // Update exports
