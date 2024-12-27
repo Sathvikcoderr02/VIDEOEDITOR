@@ -93,12 +93,48 @@ async function fetchDataFromAPI(text, language = 'en', options = {}, retries = 2
 
   const {
     videoAssets = 'all',
-    animationStyle = ''
+    animationStyle = '',
+    resolution = '1080p',
+    compression = 'web',
+    noOfWords = 4,
+    fontSize = 100,
+    animation = true,
+    showProgressBar = true,
+    watermark = true,
+    colorText1 = '#FFFFFF',
+    colorText2 = '#000000',
+    colorBg = '#FF00FF',
+    positionY = 50,
+    videoType = 'landscape'
   } = options;
 
   let apiUrl = `https://d53fdk5uti.execute-api.us-east-1.amazonaws.com/default/video_1_oct?text=${encodeURIComponent(text)}&transcription_format=segment&language=${language}`;
   
-  console.log(`Requesting URL: ${apiUrl}`);  // Log the full URL being requested
+  // Add all available parameters with default values
+  apiUrl += `&video_assets=${videoAssets}`;
+  apiUrl += `&animation_style=${animationStyle}`;
+  apiUrl += `&resolution=${resolution}`;
+  apiUrl += `&compression=${compression}`;
+  apiUrl += `&no_of_words=${noOfWords}`;
+  apiUrl += `&font_size=${fontSize}`;
+  apiUrl += `&animation=${animation}`;
+  apiUrl += `&show_progress_bar=${showProgressBar}`;
+  apiUrl += `&watermark=${watermark}`;
+  apiUrl += `&color_text1=${encodeURIComponent(colorText1)}`;
+  apiUrl += `&color_text2=${encodeURIComponent(colorText2)}`;
+  apiUrl += `&color_bg=${encodeURIComponent(colorBg)}`;
+  apiUrl += `&position_y=${positionY}`;
+  apiUrl += `&video_type=${videoType}`;
+
+  // Add additional language parameters
+  if (language !== 'en') {
+    if (language === 'hi') apiUrl += '&language=hi';
+    if (language === 'ar') apiUrl += '&language=ar';
+    if (language === 'te') apiUrl += '&language=te';
+    if (language === 'fr') apiUrl += '&language=fr';
+  }
+
+  console.log('Full API URL:', apiUrl);
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
