@@ -1170,3 +1170,56 @@ async function verifyFile(filePath) {
     return false;
   }
 }
+
+app.post('/generate-video', async (req, res) => {
+  try {
+    const { 
+      text, 
+      language = 'en', 
+      style = 'style_1',
+      transcription_format = 'segment',
+      animation = true,
+      video_assets = 'all',
+      resolution = '1080p',
+      compression = 'web',
+      no_of_words = 4,
+      font_size = 100,
+      show_progress_bar = true,
+      watermark = true,
+      color_text1 = '#FFFFFF',
+      color_text2 = '#000000',
+      color_bg = '#FF00FF',
+      position_y = 50,
+      video_type = 'landscape'
+    } = req.body;
+
+    const videoUrl = await generateVideo(text, language, style, {
+      transcriptionFormat: transcription_format,
+      animation,
+      videoAssets: video_assets,
+      resolution,
+      compression,
+      noOfWords: no_of_words,
+      fontSize: font_size,
+      showProgressBar: show_progress_bar,
+      watermark,
+      colorText1: color_text1,
+      colorText2: color_text2,
+      colorBg: color_bg,
+      positionY: position_y,
+      videoType: video_type
+    });
+
+    res.json({
+      status: 'success',
+      url: videoUrl
+    });
+  } catch (error) {
+    console.error('Error generating video:', error.message);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
+});
