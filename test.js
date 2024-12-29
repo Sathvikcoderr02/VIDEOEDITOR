@@ -972,21 +972,86 @@ function validateFilterComplex(filterComplex) {
   console.log('Filter complex validation passed');
 }
 
-// Add this function at the end of your file:
-
-function logFFmpegError(err, stdout, stderr) {
-  console.error('FFmpeg error:', err.message);
-  console.error('FFmpeg stdout:', stdout);
-  console.error('FFmpeg stderr:', stderr);
-  
-  // Log more details about the error
-  if (err.message.includes('Error reinitializing filters')) {
-    console.error('Filter reinitialization error. Check your filterComplex string.');
-  }
-  if (stderr.includes('Invalid argument')) {
-    console.error('Invalid argument error. Check your FFmpeg command options and filter arguments.');
+// Add this file check function
+async function verifyFile(filePath) {
+  try {
+    const stats = await fsp.stat(filePath);
+    console.log(`File verified: ${filePath}`);
+    console.log(`File size: ${stats.size} bytes`);
+    return true;
+  } catch (error) {
+    console.error(`File verification failed: ${filePath}`);
+    console.error(`Error: ${error.message}`);
+    return false;
   }
 }
+
+// Express middleware
+app.use(express.json({ limit: '50mb' }));
+
+app.post('/generate-video', async (req, res) => {
+  try {
+    console.log('Received request body:', JSON.stringify(req.body, null, 2));
+    
+    const { 
+      text, 
+      language = 'en', 
+      style = 'style_1',
+      transcription_format = 'segment',
+      animation,
+      videoAssets,
+      resolution,
+      compression,
+      noOfWords,
+      fontSize,
+      showProgressBar,
+      watermark,
+      colorText1,
+      colorText2,
+      colorBg,
+      positionY,
+      videoType
+    } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ status: 'error', message: 'Text is required' });
+    }
+
+    // Create options object only with provided values
+    const options = {};
+    
+    if (animation !== undefined) options.animation = animation;
+    if (videoAssets !== undefined) options.videoAssets = videoAssets;
+    if (resolution !== undefined) options.resolution = resolution;
+    if (compression !== undefined) options.compression = compression;
+    if (noOfWords !== undefined) options.noOfWords = noOfWords;
+    if (fontSize !== undefined) options.fontSize = fontSize;
+    if (showProgressBar !== undefined) options.showProgressBar = showProgressBar;
+    if (watermark !== undefined) options.watermark = watermark;
+    if (colorText1 !== undefined) options.colorText1 = colorText1;
+    if (colorText2 !== undefined) options.colorText2 = colorText2;
+    if (colorBg !== undefined) options.colorBg = colorBg;
+    if (positionY !== undefined) options.positionY = positionY;
+    if (videoType !== undefined) options.videoType = videoType;
+    if (transcription_format !== undefined) options.transcriptionFormat = transcription_format;
+
+    console.log('Passing options to generateVideo:', JSON.stringify(options, null, 2));
+
+    const videoUrl = await generateVideo(text, language, style, options);
+
+    res.json({
+      status: 'success',
+      url: videoUrl
+    });
+  } catch (error) {
+    console.error('Error generating video:', error);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
+});
 
 // New function to mix audio with background music
 async function mixAudioWithBackgroundMusic(voiceoverPath, bgMusicPath, outputPath, duration) {
@@ -1170,56 +1235,3 @@ async function verifyFile(filePath) {
     return false;
   }
 }
-
-app.post('/generate-video', async (req, res) => {
-  try {
-    const { 
-      text, 
-      language = 'en', 
-      style = 'style_1',
-      transcription_format = 'segment',
-      animation = true,
-      video_assets = 'all',
-      resolution = '1080p',
-      compression = 'web',
-      no_of_words = 4,
-      font_size = 100,
-      show_progress_bar = true,
-      watermark = true,
-      color_text1 = '#FFFFFF',
-      color_text2 = '#000000',
-      color_bg = '#FF00FF',
-      position_y = 50,
-      video_type = 'landscape'
-    } = req.body;
-
-    const videoUrl = await generateVideo(text, language, style, {
-      transcriptionFormat: transcription_format,
-      animation,
-      videoAssets: video_assets,
-      resolution,
-      compression,
-      noOfWords: no_of_words,
-      fontSize: font_size,
-      showProgressBar: show_progress_bar,
-      watermark,
-      colorText1: color_text1,
-      colorText2: color_text2,
-      colorBg: color_bg,
-      positionY: position_y,
-      videoType: video_type
-    });
-
-    res.json({
-      status: 'success',
-      url: videoUrl
-    });
-  } catch (error) {
-    console.error('Error generating video:', error.message);
-    res.status(500).json({ status: 'error', message: error.message });
-  }
-});
-
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
-});
