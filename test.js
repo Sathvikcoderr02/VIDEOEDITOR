@@ -105,10 +105,12 @@ async function fetchDataFromAPI(text, language = 'en', options = {}, retries = 2
     colorText2 = '#000000',
     colorBg = '#FF00FF',
     positionY = 50,
-    videoType = 'landscape'
+    videoType = 'landscape',
+    transcriptionFormat = 'segment',
+    ...rest
   } = options;
 
-  let apiUrl = `https://d53fdk5uti.execute-api.us-east-1.amazonaws.com/default/video_1_oct?text=${encodeURIComponent(text)}&transcription_format=segment&language=${language}`;
+  let apiUrl = `https://d53fdk5uti.execute-api.us-east-1.amazonaws.com/default/video_1_oct?text=${encodeURIComponent(text)}&transcription_format=${transcriptionFormat}&language=${language}`;
   
   // Add all available parameters with default values
   apiUrl += `&video_assets=${videoAssets}`;
@@ -132,6 +134,11 @@ async function fetchDataFromAPI(text, language = 'en', options = {}, retries = 2
     if (language === 'ar') apiUrl += '&language=ar';
     if (language === 'te') apiUrl += '&language=te';
     if (language === 'fr') apiUrl += '&language=fr';
+  }
+
+  // Add any additional options
+  for (const key in rest) {
+    apiUrl += `&${key}=${encodeURIComponent(rest[key])}`;
   }
 
   console.log('Full API URL:', apiUrl);
@@ -280,22 +287,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     }
 
     console.log('Fetching data from API...');
-    let apiData = await fetchDataFromAPI(text, language, {
-      videoAssets: options.videoAssets || 'all',
-      animationStyle: style,
-      resolution: options.resolution || '1080p',
-      compression: options.compression || 'web',
-      noOfWords: options.noOfWords || 4,
-      fontSize: options.fontSize || 100,
-      animation: options.animation !== undefined ? options.animation : true,
-      showProgressBar: options.showProgressBar !== undefined ? options.showProgressBar : true,
-      watermark: options.watermark !== undefined ? options.watermark : true,
-      colorText1: options.colorText1 || '#FFFFFF',
-      colorText2: options.colorText2 || '#000000',
-      colorBg: options.colorBg || '#FF00FF',
-      positionY: options.positionY || 50,
-      videoType: options.videoType || 'landscape'
-    });
+    let apiData = await fetchDataFromAPI(text, language, options);
 
     // Check if apiData is valid
     if (!apiData || typeof apiData !== 'object') {
