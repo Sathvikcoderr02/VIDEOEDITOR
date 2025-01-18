@@ -1000,12 +1000,46 @@ app.post('/generate-video', async (req, res) => {
       text, 
       language = 'en', 
       style = 'style_1',
-      options = {}
+      video_assets,
+      resolution,
+      compression,
+      no_of_words,
+      font_size,
+      animation,
+      show_progress_bar,
+      watermark,
+      color_text1,
+      color_text2,
+      color_bg,
+      position_y,
+      video_type,
+      transcription_format
     } = req.body;
 
     if (!text) {
       return res.status(400).json({ status: 'error', message: 'Text is required' });
     }
+
+    // Pass all parameters directly in the options object
+    const options = {
+      videoAssets: video_assets,
+      resolution,
+      compression,
+      noOfWords: no_of_words,
+      fontSize: font_size,
+      animation,
+      showProgressBar: show_progress_bar,
+      watermark,
+      colorText1: color_text1,
+      colorText2: color_text2,
+      colorBg: color_bg,
+      positionY: position_y,
+      videoType: video_type,
+      transcriptionFormat: transcription_format
+    };
+
+    // Remove undefined values
+    Object.keys(options).forEach(key => options[key] === undefined && delete options[key]);
 
     console.log('Calling generateVideo with:', {
       text,
