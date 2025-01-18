@@ -1000,20 +1000,6 @@ app.post('/generate-video', async (req, res) => {
       text, 
       language = 'en', 
       style = 'style_1',
-      transcription_format = 'segment',
-      animation,
-      video_assets,
-      resolution,
-      compression,
-      no_of_words,
-      font_size,
-      show_progress_bar,
-      watermark,
-      color_text1,
-      color_text2,
-      color_bg,
-      position_y,
-      video_type,
       options = {}
     } = req.body;
 
@@ -1021,32 +1007,14 @@ app.post('/generate-video', async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'Text is required' });
     }
 
-    // Create options object with snake_case parameters
-    const videoOptions = {
-      ...options,  // Include any nested options
-      videoAssets: video_assets || options.videoAssets,
-      animationStyle: style,
-      resolution: resolution,
-      compression: compression,
-      noOfWords: no_of_words,
-      fontSize: font_size,
-      animation: animation,
-      showProgressBar: show_progress_bar,
-      watermark: watermark,
-      colorText1: color_text1,
-      colorText2: color_text2,
-      colorBg: color_bg,
-      positionY: position_y,
-      videoType: video_type,
-      transcriptionFormat: transcription_format
-    };
+    console.log('Calling generateVideo with:', {
+      text,
+      language,
+      style,
+      options
+    });
 
-    // Remove undefined values
-    Object.keys(videoOptions).forEach(key => videoOptions[key] === undefined && delete videoOptions[key]);
-
-    console.log('Passing options to generateVideo:', JSON.stringify(videoOptions, null, 2));
-
-    const videoUrl = await generateVideo(text, language, style, videoOptions);
+    const videoUrl = await generateVideo(text, language, style, options);
 
     res.json({
       status: 'success',
