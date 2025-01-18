@@ -280,14 +280,48 @@ async function monitorFFmpegResources(operation = 'FFmpeg', minRAMPercent = 20) 
 }
 
 // Modify generateVideo to include resource checks at critical points
-async function generateVideo(text, language = 'en', style = 'style_1', options = {}) {
+async function generateVideo(
+  text,
+  language = 'en',
+  style = 'style_1',
+  video_assets = 'all',
+  resolution = '1080p',
+  compression = 'web',
+  no_of_words = 4,
+  font_size = 100,
+  animation = true,
+  show_progress_bar = true,
+  watermark = true,
+  color_text1 = '#FFFFFF',
+  color_text2 = '#000000',
+  color_bg = '#FF00FF',
+  position_y = 50,
+  video_type = 'landscape',
+  transcription_format = 'segment'
+) {
   try {
     if (!text || text.trim() === '') {
       throw new Error('Empty text provided for video generation');
     }
 
     console.log('Fetching data from API...');
-    let apiData = await fetchDataFromAPI(text, language, options);
+    let apiData = await fetchDataFromAPI(text, language, {
+      videoAssets: video_assets,
+      animationStyle: style,
+      resolution: resolution,
+      compression: compression,
+      noOfWords: no_of_words,
+      fontSize: font_size,
+      animation: animation,
+      showProgressBar: show_progress_bar,
+      watermark: watermark,
+      colorText1: color_text1,
+      colorText2: color_text2,
+      colorBg: color_bg,
+      positionY: position_y,
+      videoType: video_type,
+      transcriptionFormat: transcription_format
+    });
 
     // Check if apiData is valid
     if (!apiData || typeof apiData !== 'object') {
