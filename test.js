@@ -1034,13 +1034,36 @@ app.post('/generate-video', async (req, res) => {
       text, 
       language = 'en', 
       style = 'style_1',
-      transcription_format = 'segment',
-      animation,
+      video_assets = 'all',
+      resolution = '1080p',
+      compression = 'web',
+      no_of_words = 4,
+      font_size = 100,
+      animation = true,
+      show_progress_bar = true,
+      watermark = true,
+      color_text1 = '#FFFFFF',
+      color_text2 = '#000000',
+      color_bg = '#FF00FF',
+      position_y = 50,
+      video_type = 'landscape',
+      transcription_format = 'segment'
+    } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ status: 'error', message: 'Text is required' });
+    }
+
+    console.log('Calling generateVideo with parameters:', {
+      text,
+      language,
+      style,
       video_assets,
       resolution,
       compression,
       no_of_words,
       font_size,
+      animation,
       show_progress_bar,
       watermark,
       color_text1,
@@ -1048,39 +1071,28 @@ app.post('/generate-video', async (req, res) => {
       color_bg,
       position_y,
       video_type,
-      options = {}
-    } = req.body;
+      transcription_format
+    });
 
-    if (!text) {
-      return res.status(400).json({ status: 'error', message: 'Text is required' });
-    }
-
-    // Create options object with snake_case parameters
-    const videoOptions = {
-      ...options,  // Include any nested options
-      videoAssets: video_assets || options.videoAssets,
-      animationStyle: style,
-      resolution: resolution,
-      compression: compression,
-      noOfWords: no_of_words,
-      fontSize: font_size,
-      animation: animation,
-      showProgressBar: show_progress_bar,
-      watermark: watermark,
-      colorText1: color_text1,
-      colorText2: color_text2,
-      colorBg: color_bg,
-      positionY: position_y,
-      videoType: video_type,
-      transcriptionFormat: transcription_format
-    };
-
-    // Remove undefined values
-    Object.keys(videoOptions).forEach(key => videoOptions[key] === undefined && delete videoOptions[key]);
-
-    console.log('Passing options to generateVideo:', JSON.stringify(videoOptions, null, 2));
-
-    const videoUrl = await generateVideo(text, language, style, videoOptions);
+    const videoUrl = await generateVideo(
+      text,
+      language,
+      style,
+      video_assets,
+      resolution,
+      compression,
+      no_of_words,
+      font_size,
+      animation,
+      show_progress_bar,
+      watermark,
+      color_text1,
+      color_text2,
+      color_bg,
+      position_y,
+      video_type,
+      transcription_format
+    );
 
     res.json({
       status: 'success',
