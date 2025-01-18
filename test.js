@@ -1002,45 +1002,51 @@ app.post('/generate-video', async (req, res) => {
       style = 'style_1',
       transcription_format = 'segment',
       animation,
-      videoAssets,
+      video_assets,
       resolution,
       compression,
-      noOfWords,
-      fontSize,
-      showProgressBar,
+      no_of_words,
+      font_size,
+      show_progress_bar,
       watermark,
-      colorText1,
-      colorText2,
-      colorBg,
-      positionY,
-      videoType
+      color_text1,
+      color_text2,
+      color_bg,
+      position_y,
+      video_type,
+      options = {}
     } = req.body;
 
     if (!text) {
       return res.status(400).json({ status: 'error', message: 'Text is required' });
     }
 
-    // Create options object only with provided values
-    const options = {};
-    
-    if (animation !== undefined) options.animation = animation;
-    if (videoAssets !== undefined) options.videoAssets = videoAssets;
-    if (resolution !== undefined) options.resolution = resolution;
-    if (compression !== undefined) options.compression = compression;
-    if (noOfWords !== undefined) options.noOfWords = noOfWords;
-    if (fontSize !== undefined) options.fontSize = fontSize;
-    if (showProgressBar !== undefined) options.showProgressBar = showProgressBar;
-    if (watermark !== undefined) options.watermark = watermark;
-    if (colorText1 !== undefined) options.colorText1 = colorText1;
-    if (colorText2 !== undefined) options.colorText2 = colorText2;
-    if (colorBg !== undefined) options.colorBg = colorBg;
-    if (positionY !== undefined) options.positionY = positionY;
-    if (videoType !== undefined) options.videoType = videoType;
-    if (transcription_format !== undefined) options.transcriptionFormat = transcription_format;
+    // Create options object with snake_case parameters
+    const videoOptions = {
+      ...options,  // Include any nested options
+      videoAssets: video_assets || options.videoAssets,
+      animationStyle: style,
+      resolution: resolution,
+      compression: compression,
+      noOfWords: no_of_words,
+      fontSize: font_size,
+      animation: animation,
+      showProgressBar: show_progress_bar,
+      watermark: watermark,
+      colorText1: color_text1,
+      colorText2: color_text2,
+      colorBg: color_bg,
+      positionY: position_y,
+      videoType: video_type,
+      transcriptionFormat: transcription_format
+    };
 
-    console.log('Passing options to generateVideo:', JSON.stringify(options, null, 2));
+    // Remove undefined values
+    Object.keys(videoOptions).forEach(key => videoOptions[key] === undefined && delete videoOptions[key]);
 
-    const videoUrl = await generateVideo(text, language, style, options);
+    console.log('Passing options to generateVideo:', JSON.stringify(videoOptions, null, 2));
+
+    const videoUrl = await generateVideo(text, language, style, videoOptions);
 
     res.json({
       status: 'success',
