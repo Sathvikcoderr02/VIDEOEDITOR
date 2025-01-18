@@ -282,7 +282,19 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Fetching data from API...');
     let apiData = await fetchDataFromAPI(text, language, {
       videoAssets: options.videoAssets || 'all',
-      animationStyle: style
+      animationStyle: style,
+      resolution: options.resolution || '1080p',
+      compression: options.compression || 'web',
+      noOfWords: options.noOfWords || 4,
+      fontSize: options.fontSize || 100,
+      animation: options.animation !== undefined ? options.animation : true,
+      showProgressBar: options.showProgressBar !== undefined ? options.showProgressBar : true,
+      watermark: options.watermark !== undefined ? options.watermark : true,
+      colorText1: options.colorText1 || '#FFFFFF',
+      colorText2: options.colorText2 || '#000000',
+      colorBg: options.colorBg || '#FF00FF',
+      positionY: options.positionY || 50,
+      videoType: options.videoType || 'landscape'
     });
 
     // Check if apiData is valid
@@ -691,8 +703,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
       console.log('Starting S3 upload with key:', s3Key);
       console.log('Using AWS credentials:', {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'Present' : 'Missing',
-        secretKey: process.env.AWS_SECRET_ACCESS_KEY ? 'Present' : 'Missing',
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
         bucket: process.env.AWS_BUCKET_NAME,
         region: process.env.AWS_REGION
       });
