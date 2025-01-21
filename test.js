@@ -339,11 +339,11 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Calculate required duration based on text length
     const wordCount = text.split(' ').length;
-    const wordsPerSecond = 2; // Assume 2 words per second on average
+    const wordsPerSecond = 1; // Slower speed: 1.5 words per second for better readability
     const calculatedDuration = Math.ceil(wordCount / wordsPerSecond);
     
-    // Set desired duration
-    const desiredDuration = calculatedDuration;
+    // Set desired duration with buffer
+    const desiredDuration = calculatedDuration +15;
     console.log('Word count:', wordCount);
     console.log('Calculated duration:', calculatedDuration);
     console.log('Desired duration:', desiredDuration);
@@ -354,10 +354,10 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     
     if (isNaN(actualDuration) || actualDuration <= 0) {
       console.warn('Invalid actualDuration:', actualDuration);
-      actualDuration = desiredDuration + 5;
+      actualDuration = desiredDuration + 15; // Add 15 seconds buffer
     } else {
-      // Add 5 seconds to actual duration
-      actualDuration = actualDuration + 5;
+      // Add 15 seconds buffer to actual duration
+      actualDuration = actualDuration + 15;
     }
     console.log('Using duration:', actualDuration);
 
