@@ -337,8 +337,19 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     watermark = watermark === 'true';
     positionY = parseInt(positionY);
 
-    // Set desired duration first
-    const desiredDuration = 96; // Set the desired duration to 96 seconds
+    // Set minimum duration first
+    const minDuration = 96; // Minimum duration of 96 seconds
+
+    // Calculate required duration based on text length
+    const wordCount = text.split(' ').length;
+    const wordsPerSecond = 2; // Assume 2 words per second on average
+    const calculatedDuration = Math.ceil(wordCount / wordsPerSecond);
+    
+    // Set desired duration to be the maximum of minDuration and calculatedDuration
+    const desiredDuration = Math.max(minDuration, calculatedDuration);
+    console.log('Word count:', wordCount);
+    console.log('Calculated duration:', calculatedDuration);
+    console.log('Desired duration:', desiredDuration);
 
     // Handle duration with proper validation
     let actualDuration = parseFloat(apiDuration);
@@ -852,12 +863,14 @@ function formatASSTime(seconds) {
 function generateTranscriptionDetails(text) {
   const words = text.split(' ');
   let currentTime = 0;
-  const wordsPerSegment = 15; 
-  const segmentDuration = 8; 
-
+  const wordsPerSegment = 15;
+  const wordsPerSecond = 2;
+  
   const segments = [];
   for (let i = 0; i < words.length; i += wordsPerSegment) {
     const segmentWords = words.slice(i, i + wordsPerSegment);
+    const segmentDuration = Math.ceil(segmentWords.length / wordsPerSecond);
+    
     segments.push({
       id: segments.length,
       start: currentTime,
@@ -870,7 +883,8 @@ function generateTranscriptionDetails(text) {
   // Ensure last segment has enough time
   if (segments.length > 0) {
     const lastSegment = segments[segments.length - 1];
-    lastSegment.end = Math.max(lastSegment.end, currentTime + 5); 
+    const extraTime = Math.ceil(lastSegment.text.split(' ').length / wordsPerSecond) + 3;
+    lastSegment.end = Math.max(lastSegment.end, currentTime + extraTime);
   }
 
   return segments;
