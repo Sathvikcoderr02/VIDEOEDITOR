@@ -337,16 +337,13 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     watermark = watermark === 'true';
     positionY = parseInt(positionY);
 
-    // Set minimum duration first
-    const minDuration = 196; // Minimum duration of 96 seconds
-
     // Calculate required duration based on text length
     const wordCount = text.split(' ').length;
     const wordsPerSecond = 2; // Assume 2 words per second on average
     const calculatedDuration = Math.ceil(wordCount / wordsPerSecond);
     
-    // Set desired duration to be the maximum of minDuration and calculatedDuration, plus 5 seconds
-    const desiredDuration = Math.max(minDuration, calculatedDuration) + 5;
+    // Set desired duration to be the calculated duration plus 10 seconds
+    const desiredDuration = calculatedDuration + 10;
     console.log('Word count:', wordCount);
     console.log('Calculated duration:', calculatedDuration);
     console.log('Desired duration:', desiredDuration);
@@ -359,8 +356,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       console.warn('Invalid actualDuration:', actualDuration);
       actualDuration = desiredDuration;
     } else {
-      // Ensure actualDuration is at least desiredDuration
-      actualDuration = Math.max(actualDuration, desiredDuration);
+      // Add 10 seconds to actual duration
+      actualDuration = actualDuration + 10;
     }
     console.log('Using duration:', actualDuration);
 
