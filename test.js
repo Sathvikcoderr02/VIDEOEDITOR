@@ -338,15 +338,15 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     positionY = parseInt(positionY);
 
     // Set minimum duration first
-    const minDuration = 96; // Minimum duration of 96 seconds
+    const minDuration = 196; // Minimum duration of 96 seconds
 
     // Calculate required duration based on text length
     const wordCount = text.split(' ').length;
     const wordsPerSecond = 2; // Assume 2 words per second on average
     const calculatedDuration = Math.ceil(wordCount / wordsPerSecond);
     
-    // Set desired duration to be the maximum of minDuration and calculatedDuration
-    const desiredDuration = Math.max(minDuration, calculatedDuration);
+    // Set desired duration to be the maximum of minDuration and calculatedDuration, plus 5 seconds
+    const desiredDuration = Math.max(minDuration, calculatedDuration) + 5;
     console.log('Word count:', wordCount);
     console.log('Calculated duration:', calculatedDuration);
     console.log('Desired duration:', desiredDuration);
