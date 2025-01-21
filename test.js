@@ -342,8 +342,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     const wordsPerSecond = 2; // Assume 2 words per second on average
     const calculatedDuration = Math.ceil(wordCount / wordsPerSecond);
     
-    // Set desired duration to be the maximum of minDuration and calculatedDuration, plus 5 seconds
-    const desiredDuration = Math.max(minDuration, calculatedDuration) + 5;
+    // Set desired duration
+    const desiredDuration = calculatedDuration;
     console.log('Word count:', wordCount);
     console.log('Calculated duration:', calculatedDuration);
     console.log('Desired duration:', desiredDuration);
@@ -354,10 +354,10 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     
     if (isNaN(actualDuration) || actualDuration <= 0) {
       console.warn('Invalid actualDuration:', actualDuration);
-      actualDuration = desiredDuration;
+      actualDuration = desiredDuration + 5;
     } else {
-      // Ensure actualDuration is at least desiredDuration
-      actualDuration = Math.max(actualDuration, desiredDuration);
+      // Add 5 seconds to actual duration
+      actualDuration = actualDuration + 5;
     }
     console.log('Using duration:', actualDuration);
 
