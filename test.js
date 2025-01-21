@@ -286,6 +286,12 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       throw new Error('Empty text provided for video generation');
     }
 
+    // Force video assets for style_1
+    if (style === 'style_1') {
+      options.videoAssets = 'video';
+      options.assetType = 'video';
+    }
+
     console.log('Fetching data from API...');
     let apiData = await fetchDataFromAPI(text, language, options);
 
@@ -316,7 +322,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       duration: apiDuration,
       words,
       fontFile,
-      bg_music_file: backgroundMusicUrl, // Update this line to use bg_music_file
+      bg_music_file: backgroundMusicUrl,
     } = apiData;
 
     // Check if apiVideos is undefined or not an array
@@ -325,39 +331,40 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       apiVideos = apiData.assets || [];
     }
 
+    // For style_1, filter out any non-video assets
+    if (style === 'style_1') {
+      apiVideos = apiVideos.filter(asset => {
+        const url = asset.assetUrl || asset.videoUrl;
+        return url && url.toLowerCase().endsWith('.mp4');
+      });
+      
+      if (apiVideos.length === 0) {
+        throw new Error('No video assets available for style_1');
+      }
+    }
+
     if (apiVideos.length === 0) {
       throw new Error('No video or image assets provided by API');
     }
 
-    // Convert string values to appropriate types
-    no_of_words = no_of_words === 'more' ? 4 : 2;
-    font_size = parseInt(font_size);
-    animation = animation === 'true' || animation === true;
-    show_progression_bar = show_progression_bar === 'true';
-    watermark = watermark === 'true';
-    positionY = parseInt(positionY);
-    const actualDuration = parseFloat(apiDuration);
-    console.log('Actual duration from API:', actualDuration);
-    if (isNaN(actualDuration) || actualDuration <= 0) {
-      console.warn('Invalid actualDuration:', actualDuration);
-      actualDuration = desiredDuration; // Fallback to desired duration
-      console.log('Using fallback duration:', actualDuration);
-    }
-
-    const desiredDuration = 96; // Set the desired duration to 36 seconds
-    console.log('API duration:', actualDuration);
-    console.log('Desired duration:', desiredDuration);
-
-    // Create video_details from apiVideos
-    const video_details = apiVideos.map(asset => ({
-      url: asset.assetUrl || asset.videoUrl,
-      duration: parseFloat(asset.videoDuration || asset.segmentDuration),
-      segmentDuration: parseFloat(asset.segmentDuration),
-      assetType: asset.assetUrl ? (asset.assetUrl.toLowerCase().endsWith('.mp4') ? 'video' : 'image') : 'video',
-      segmentStart: parseFloat(asset.segmentStart),
-      segmentEnd: parseFloat(asset.segmentEnd),
-      transcriptionPart: asset.transcriptionPart
-    }));
+    // Create video_details from apiVideos, ensuring only videos for style_1
+    const video_details = apiVideos.map(asset => {
+      const url = asset.assetUrl || asset.videoUrl;
+      const isVideo = url && url.toLowerCase().endsWith('.mp4');
+      
+      // For style_1, force assetType to be video
+      const assetType = style === 'style_1' ? 'video' : (isVideo ? 'video' : 'image');
+      
+      return {
+        url,
+        duration: parseFloat(asset.videoDuration || asset.segmentDuration),
+        segmentDuration: parseFloat(asset.segmentDuration),
+        assetType,
+        segmentStart: parseFloat(asset.segmentStart),
+        segmentEnd: parseFloat(asset.segmentEnd),
+        transcriptionPart: asset.transcriptionPart
+      };
+    });
 
     console.log('Video details:', JSON.stringify(video_details, null, 2));
 
@@ -502,7 +509,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     }
 
     const subtitlePath = path.join(tempDir, 'subtitles.ass');
-    await createASSSubtitleFile(transcription_details, subtitlePath, no_of_words, font_size, animation, videoWidth, videoHeight, actualDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar);
+    await createASSSubtitleFile(transcription_details, subtitlePath, no_of_words, font_size, animation, videoWidth, videoHeight, apiDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar);
 
     // Use logo_url instead of hardcoded logo URL
     const logoPath = path.join(tempDir, 'logo.png');
@@ -1000,20 +1007,20 @@ app.post('/generate-video', async (req, res) => {
       text, 
       language = 'en', 
       style = 'style_1',
-      video_assets,
-      resolution,
-      compression,
-      no_of_words,
-      font_size,
-      animation,
-      show_progress_bar,
-      watermark,
-      color_text1,
-      color_text2,
-      color_bg,
-      position_y,
-      video_type,
-      transcription_format
+      video_assets = 'all',
+      resolution = '1080p',
+      compression = 'web',
+      no_of_words = 4,
+      font_size = 100,
+      animation = true,
+      show_progress_bar = true,
+      watermark = true,
+      color_text1 = '#FFFFFF',
+      color_text2 = '#000000',
+      color_bg = '#FF00FF',
+      position_y = 70,
+      video_type = 'portrait',
+      transcription_format = 'segment'
     } = req.body;
 
     if (!text) {
@@ -1035,11 +1042,18 @@ app.post('/generate-video', async (req, res) => {
       colorBg: color_bg,
       positionY: position_y,
       videoType: video_type,
-      transcriptionFormat: transcription_format
+      transcriptionFormat: transcription_format,
+      style // Add style to options to ensure it's used for asset selection
     };
 
     // Remove undefined values
     Object.keys(options).forEach(key => options[key] === undefined && delete options[key]);
+
+    // Force video assets for style_1
+    if (style === 'style_1') {
+      options.videoAssets = 'video';
+      options.assetType = 'video';
+    }
 
     console.log('Calling generateVideo with:', {
       text,
