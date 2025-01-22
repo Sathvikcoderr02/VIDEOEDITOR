@@ -368,13 +368,16 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     console.log('Video details:', JSON.stringify(video_details, null, 2));
 
+    // Calculate base duration first
+    let baseDuration = video_details.reduce((sum, video) => sum + video.segmentDuration, 0);
+
     // Extract transcription details from video_details and adjust timing
     const transcription_details = video_details.map((video, index, array) => {
       // For the last segment, extend the end time
       if (index === array.length - 1) {
         return {
           start: video.segmentStart,
-          end: video.segmentEnd + 10, // Add 10 seconds to last segment
+          end: baseDuration + 10, // Use full duration including buffer
           text: video.transcriptionPart,
           words: words ? words.filter(word => word.start >= video.segmentStart && word.end <= video.segmentEnd) : []
         };
@@ -463,7 +466,6 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Valid videos:', JSON.stringify(validVideos, null, 2));
 
     const videoLoop = validVideos;
-    let baseDuration = videoLoop.reduce((sum, video) => sum + video.segmentDuration, 0);
     totalVideoDuration = baseDuration + 10; // Add 10 seconds buffer
 
     console.log('Video loop created with total duration:', totalVideoDuration);
