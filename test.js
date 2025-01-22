@@ -342,23 +342,17 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     const wordsPerSecond = 1.5; // Slower speed for better readability
     const calculatedDuration = Math.ceil(wordCount / wordsPerSecond);
     
-    // Set desired duration
-    const desiredDuration = calculatedDuration;
-    console.log('Word count:', wordCount);
-    console.log('Calculated duration:', calculatedDuration);
-    console.log('Desired duration:', desiredDuration);
-
     // Handle duration with proper validation
     let actualDuration = parseFloat(apiDuration);
     console.log('API duration:', actualDuration);
     
     if (isNaN(actualDuration) || actualDuration <= 0) {
       console.warn('Invalid actualDuration:', actualDuration);
-      actualDuration = desiredDuration + 20; // Add 20 seconds buffer
-    } else {
-      // Add buffer to actual duration
-      actualDuration = actualDuration + 20; // Increased buffer to 20 seconds
+      actualDuration = calculatedDuration;
     }
+
+    // Add buffer to ensure all text is shown
+    actualDuration = actualDuration + 10; // Add 10 seconds buffer
     console.log('Using duration:', actualDuration);
 
     const video_details = apiVideos.map(asset => ({
@@ -373,9 +367,26 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     console.log('Video details:', JSON.stringify(video_details, null, 2));
 
-    // Generate our own transcription details instead of using API's timing
-    const transcription_details = generateTranscriptionDetails(text);
-    console.log('Generated transcription details:', JSON.stringify(transcription_details, null, 2));
+    // Extract transcription details from video_details and adjust timing
+    const transcription_details = video_details.map((video, index, array) => {
+      // For the last segment, extend the end time
+      if (index === array.length - 1) {
+        return {
+          start: video.segmentStart,
+          end: video.segmentEnd + 10, // Add 10 seconds to last segment
+          text: video.transcriptionPart,
+          words: words ? words.filter(word => word.start >= video.segmentStart && word.end <= video.segmentEnd) : []
+        };
+      }
+      return {
+        start: video.segmentStart,
+        end: video.segmentEnd,
+        text: video.transcriptionPart,
+        words: words ? words.filter(word => word.start >= video.segmentStart && word.end <= video.segmentEnd) : []
+      };
+    });
+
+    console.log('Transcription details:', JSON.stringify(transcription_details, null, 2));
 
     console.log('Starting video generation process...');
     ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg/ffmpeg'); // Update this path if necessary
