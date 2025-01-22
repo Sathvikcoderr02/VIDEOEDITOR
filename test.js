@@ -463,7 +463,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Valid videos:', JSON.stringify(validVideos, null, 2));
 
     const videoLoop = validVideos;
-    totalVideoDuration = videoLoop.reduce((sum, video) => sum + video.segmentDuration, 0);
+    let baseDuration = videoLoop.reduce((sum, video) => sum + video.segmentDuration, 0);
+    totalVideoDuration = baseDuration + 10; // Add 10 seconds buffer
 
     console.log('Video loop created with total duration:', totalVideoDuration);
 
