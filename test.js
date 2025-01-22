@@ -339,11 +339,11 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Calculate required duration based on text length
     const wordCount = text.split(' ').length;
-    const wordsPerSecond = 1; // Slower speed: 1.5 words per second for better readability
+    const wordsPerSecond = 1.5; // Slower speed for better readability
     const calculatedDuration = Math.ceil(wordCount / wordsPerSecond);
     
-    // Set desired duration with buffer
-    const desiredDuration = calculatedDuration +15;
+    // Set desired duration
+    const desiredDuration = calculatedDuration;
     console.log('Word count:', wordCount);
     console.log('Calculated duration:', calculatedDuration);
     console.log('Desired duration:', desiredDuration);
@@ -354,10 +354,10 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     
     if (isNaN(actualDuration) || actualDuration <= 0) {
       console.warn('Invalid actualDuration:', actualDuration);
-      actualDuration = desiredDuration + 15; // Add 15 seconds buffer
+      actualDuration = desiredDuration + 20; // Add 20 seconds buffer
     } else {
-      // Add 15 seconds buffer to actual duration
-      actualDuration = actualDuration + 15;
+      // Add buffer to actual duration
+      actualDuration = actualDuration + 20; // Increased buffer to 20 seconds
     }
     console.log('Using duration:', actualDuration);
 
@@ -373,15 +373,9 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     console.log('Video details:', JSON.stringify(video_details, null, 2));
 
-    // Extract transcription details from video_details
-    const transcription_details = video_details.map(video => ({
-      start: video.segmentStart,
-      end: video.segmentEnd,
-      text: video.transcriptionPart,
-      words: words ? words.filter(word => word.start >= video.segmentStart && word.end <= video.segmentEnd) : []
-    }));
-
-    console.log('Transcription details:', JSON.stringify(transcription_details, null, 2));
+    // Generate our own transcription details instead of using API's timing
+    const transcription_details = generateTranscriptionDetails(text);
+    console.log('Generated transcription details:', JSON.stringify(transcription_details, null, 2));
 
     console.log('Starting video generation process...');
     ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg/ffmpeg'); // Update this path if necessary
@@ -860,13 +854,13 @@ function formatASSTime(seconds) {
 function generateTranscriptionDetails(text) {
   const words = text.split(' ');
   let currentTime = 0;
-  const wordsPerSegment = 15;
-  const wordsPerSecond = 2;
+  const wordsPerSegment = 10; // Reduced for better timing
+  const wordsPerSecond = 1.5; // Slower speed for better readability
   
   const segments = [];
   for (let i = 0; i < words.length; i += wordsPerSegment) {
     const segmentWords = words.slice(i, i + wordsPerSegment);
-    const segmentDuration = Math.ceil(segmentWords.length / wordsPerSecond);
+    const segmentDuration = Math.ceil(segmentWords.length / wordsPerSecond) + 1; // Add 1 second per segment
     
     segments.push({
       id: segments.length,
@@ -877,11 +871,12 @@ function generateTranscriptionDetails(text) {
     currentTime += segmentDuration;
   }
 
-  // Ensure last segment has enough time
+  // Add extra time for the last segment
   if (segments.length > 0) {
     const lastSegment = segments[segments.length - 1];
-    const extraTime = Math.ceil(lastSegment.text.split(' ').length / wordsPerSecond) + 3;
-    lastSegment.end = Math.max(lastSegment.end, currentTime + extraTime);
+    const lastSegmentWords = lastSegment.text.split(' ').length;
+    const extraTime = Math.ceil(lastSegmentWords / wordsPerSecond) + 3; // Add 3 extra seconds for last segment
+    lastSegment.end = currentTime + extraTime;
   }
 
   return segments;
