@@ -353,6 +353,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Add buffer to ensure all text is shown
     actualDuration = actualDuration + 10; // Add 10 seconds buffer
+    let totalVideoDuration = actualDuration; // For progress bar
     console.log('Using duration:', actualDuration);
 
     const video_details = apiVideos.map(asset => ({
@@ -462,7 +463,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Valid videos:', JSON.stringify(validVideos, null, 2));
 
     const videoLoop = validVideos;
-    let totalVideoDuration = videoLoop.reduce((sum, video) => sum + video.segmentDuration, 0);
+    totalVideoDuration = videoLoop.reduce((sum, video) => sum + video.segmentDuration, 0);
 
     console.log('Video loop created with total duration:', totalVideoDuration);
 
