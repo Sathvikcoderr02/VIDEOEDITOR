@@ -372,62 +372,55 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     let baseDuration = video_details.reduce((sum, video) => sum + video.segmentDuration, 0);
     
     // Add extra buffer to ensure all text is displayed
-    const extraBuffer = 5;
+    const extraBuffer = 8; // Increased buffer time
+    const minSegmentDuration = 3; // Minimum duration for each segment
     baseDuration += extraBuffer;
 
+    // Ensure minimum duration for segments
+    video_details = video_details.map((video, index) => ({
+      ...video,
+      segmentDuration: Math.max(video.segmentDuration, minSegmentDuration)
+    }));
+
+    // Recalculate base duration with adjusted segment durations
+    baseDuration = video_details.reduce((sum, video) => sum + video.segmentDuration, 0) + extraBuffer;
+
     // Extract transcription details from video_details and adjust timing
-    const transcription_details = video_details.map((video, index, array) => {
-      // For the last segment, extend the end time to ensure all text is shown
-      if (index === array.length - 1) {
-        return {
-          start: video.segmentStart,
-          end: Math.max(baseDuration, video.segmentEnd + extraBuffer), // Ensure we have enough time for the last segment
-          text: video.transcriptionPart,
-          words: words ? words.filter(word => word.start >= video.segmentStart && word.end <= video.segmentEnd + extraBuffer) : []
-        };
-      }
-      return {
-        start: video.segmentStart,
-        end: video.segmentEnd,
+    const transcription_details = [];
+    let currentStart = 0;
+
+    video_details.forEach((video, index, array) => {
+      const isLastSegment = index === array.length - 1;
+      const segmentDuration = video.segmentDuration;
+      const end = isLastSegment ? baseDuration : currentStart + segmentDuration;
+      
+      transcription_details.push({
+        start: currentStart,
+        end: end,
         text: video.transcriptionPart,
-        words: words ? words.filter(word => word.start >= video.segmentStart && word.end <= video.segmentEnd) : []
-      };
+        words: words ? words.filter(word => 
+          word.start >= currentStart && 
+          (isLastSegment ? true : word.end <= end)
+        ) : []
+      });
+      
+      currentStart = end;
     });
 
-    console.log('Transcription details:', JSON.stringify(transcription_details, null, 2));
-
-    console.log('Starting video generation process...');
-    ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg/ffmpeg'); // Update this path if necessary
-
-    // Set video dimensions based on resolution and video_type
-    let videoWidth, videoHeight;
-    switch (resolution) {
-      case "720p":
-        if (video_type === "landscape") {
-          videoWidth = 1280;
-          videoHeight = 720;
-        } else if (video_type === "square") {
-          videoWidth = videoHeight = 720;
-        } else { // portrait
-          videoWidth = 720;
-          videoHeight = 1280;
-        }
-        break;
-      case "1080p":
-      default:
-        if (video_type === "landscape") {
-          videoWidth = 1920;
-          videoHeight = 1080;
-        } else if (video_type === "square") {
-          videoWidth = videoHeight = 1080;
-        } else { // portrait
-          videoWidth = 1080;
-          videoHeight = 1920;
-        }
-        break;
+    // Ensure the last segment has enough time
+    if (transcription_details.length > 0) {
+      const lastSegment = transcription_details[transcription_details.length - 1];
+      const minLastSegmentDuration = 10; // Minimum duration for last segment
+      if (lastSegment.end - lastSegment.start < minLastSegmentDuration) {
+        lastSegment.end = lastSegment.start + minLastSegmentDuration;
+        baseDuration = Math.max(baseDuration, lastSegment.end);
+      }
     }
 
-    console.log(`Video dimensions set to: ${videoWidth}x${videoHeight} (${video_type})`);
+    // Update total video duration
+    totalVideoDuration = baseDuration;
+    console.log('Adjusted total duration:', totalVideoDuration);
+    console.log('Transcription details:', JSON.stringify(transcription_details, null, 2));
 
     const tempDir = path.join(__dirname, 'temp');
     await fsp.mkdir(tempDir, { recursive: true });
@@ -470,7 +463,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Valid videos:', JSON.stringify(validVideos, null, 2));
 
     const videoLoop = validVideos;
-    totalVideoDuration = baseDuration + extraBuffer;
+    totalVideoDuration = baseDuration;
 
     console.log('Video loop created with total duration:', totalVideoDuration);
 
