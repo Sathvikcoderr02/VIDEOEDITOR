@@ -383,19 +383,22 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     const transcription_details = video_details.map((video, index, array) => {
       // For the last segment, extend the end time to ensure all text is shown
       if (index === array.length - 1) {
-        const lastSegmentDuration = Math.max(12, video.segmentDuration); // Ensure at least 12 seconds for last segment
+        const lastSegmentDuration = Math.max(15, video.segmentDuration); // Ensure at least 15 seconds for last segment
+        const extendedEnd = video.segmentStart + lastSegmentDuration + extraBuffer;
         return {
           start: video.segmentStart,
-          end: video.segmentStart + lastSegmentDuration + extraBuffer,
+          end: extendedEnd,
           text: video.transcriptionPart,
-          words: words ? words.filter(word => word.start >= video.segmentStart) : [] // Include all remaining words
+          words: words ? words.filter(word => word.start >= video.segmentStart) : [], // Include all remaining words
+          isLastSegment: true // Mark this as the last segment
         };
       }
       return {
         start: video.segmentStart,
         end: video.segmentEnd,
         text: video.transcriptionPart,
-        words: words ? words.filter(word => word.start >= video.segmentStart && word.end <= video.segmentEnd) : []
+        words: words ? words.filter(word => word.start >= video.segmentStart && word.end <= video.segmentEnd) : [],
+        isLastSegment: false
       };
     });
 
@@ -802,9 +805,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     for (let i = 0; i < words.length; i += no_of_words) {
       const slideWords = words.slice(i, i + no_of_words);
       const slideText = slideWords.join(' ');
-      const slideDuration = (segment.end - segment.start) * (slideWords.length / words.length);
-      const slideStartTime = formatASSTime(segment.start + (i / words.length) * (segment.end - segment.start));
-      const slideEndTime = formatASSTime(Math.min(segment.start + ((i + slideWords.length) / words.length) * (segment.end - segment.start), segment.end));
+      let slideDuration, slideStartTime, slideEndTime;
+
+      if (segment.isLastSegment) {
+        // For last segment, distribute time evenly among all slides
+        const totalSlides = Math.ceil(words.length / no_of_words);
+        const timePerSlide = (segment.end - segment.start) / totalSlides;
+        slideStartTime = formatASSTime(segment.start + (i / no_of_words) * timePerSlide);
+        slideEndTime = formatASSTime(segment.start + ((i / no_of_words) + 1) * timePerSlide);
+        slideDuration = timePerSlide;
+      } else {
+        slideDuration = (segment.end - segment.start) * (slideWords.length / words.length);
+        slideStartTime = formatASSTime(segment.start + (i / words.length) * (segment.end - segment.start));
+        slideEndTime = formatASSTime(Math.min(segment.start + ((i + slideWords.length) / words.length) * (segment.end - segment.start), segment.end));
+      }
 
       // Check if this is a segment that needs center alignment (at 1 second or 11 seconds)
       const needsCenterAlign = (segment.start === 1 || segment.start === 11);
