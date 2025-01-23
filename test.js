@@ -330,12 +330,16 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     }
 
     // Convert string values to appropriate types
-    no_of_words = no_of_words === 'more' ? 4 : 2;
+    no_of_words = parseInt(options.no_of_words || no_of_words); // Strictly use the provided number of words
     font_size = parseInt(font_size);
     animation = animation === 'true' || animation === true;
     show_progression_bar = show_progression_bar === 'true';
     watermark = watermark === 'true';
     positionY = parseInt(positionY);
+
+    // Ensure no_of_words is at least 1
+    no_of_words = Math.max(1, no_of_words);
+    console.log('Using number of words:', no_of_words);
 
     // Calculate required duration based on text length
     const wordCount = text.split(' ').length;
@@ -379,7 +383,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     const transcription_details = video_details.map((video, index, array) => {
       // For the last segment, extend the end time to ensure all text is shown
       if (index === array.length - 1) {
-        const lastSegmentDuration = Math.max(8, video.segmentDuration); // Ensure at least 8 seconds for last segment
+        const lastSegmentDuration = Math.max(12, video.segmentDuration); // Ensure at least 12 seconds for last segment
         return {
           start: video.segmentStart,
           end: video.segmentStart + lastSegmentDuration + extraBuffer,
