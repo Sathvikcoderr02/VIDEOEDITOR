@@ -379,19 +379,32 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     const extraBuffer = 5;
     baseDuration += extraBuffer;
 
+    // Log segment details for debugging
+    console.log('Text segments received from API:');
+    video_details.forEach((video, index) => {
+      console.log(`Segment ${index + 1}:`, {
+        text: video.transcriptionPart,
+        start: video.segmentStart,
+        end: video.segmentEnd,
+        duration: video.segmentDuration
+      });
+    });
+
     // Extract transcription details from video_details and adjust timing
     const transcription_details = video_details.map((video, index, array) => {
       // For the last segment, extend the end time to ensure all text is shown
       if (index === array.length - 1) {
         const lastSegmentDuration = Math.max(15, video.segmentDuration); // Ensure at least 15 seconds for last segment
         const extendedEnd = video.segmentStart + lastSegmentDuration + extraBuffer;
-        return {
+        const segment = {
           start: video.segmentStart,
           end: extendedEnd,
           text: video.transcriptionPart,
           words: words ? words.filter(word => word.start >= video.segmentStart) : [], // Include all remaining words
           isLastSegment: true // Mark this as the last segment
         };
+        console.log('Last segment details:', segment);
+        return segment;
       }
       return {
         start: video.segmentStart,
@@ -402,7 +415,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       };
     });
 
-    console.log('Transcription details:', JSON.stringify(transcription_details, null, 2));
+    console.log('Final transcription details:', JSON.stringify(transcription_details, null, 2));
 
     console.log('Starting video generation process...');
     ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg/ffmpeg'); // Update this path if necessary
@@ -590,11 +603,18 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
             let inputPart = '';
             
             if (video.assetType === 'image') {
+              // For images, ensure they loop enough to cover the full duration
               inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS,`;
               const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
               inputPart += `${effect},`;
             } else {
-              inputPart = `[${i}:v]trim=duration=${segmentDuration},setpts=PTS-STARTPTS,`;
+              // For videos, handle the last segment differently
+              if (i === validVideos.length - 1) {
+                // For the last video segment, loop it to cover any remaining duration
+                inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS,`;
+              } else {
+                inputPart = `[${i}:v]trim=duration=${segmentDuration},setpts=PTS-STARTPTS,`;
+              }
             }
             
             filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
@@ -638,7 +658,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-shortest',
           '-async', '1',
           '-vsync', '1',
-          '-max_interleave_delta', '0'
+          '-max_interleave_delta', '0',
+          '-t', `${totalVideoDuration}` // Explicitly set the total duration
         ];
 
         // Modify output options based on compression setting
@@ -802,18 +823,28 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     const endTime = formatASSTime(segment.end);
     const words = segment.text.split(' ');
 
+    console.log(`Processing segment: "${segment.text}"`);
+    console.log(`Number of words: ${words.length}, Words per slide: ${no_of_words}`);
+
     for (let i = 0; i < words.length; i += no_of_words) {
       const slideWords = words.slice(i, i + no_of_words);
       const slideText = slideWords.join(' ');
       let slideDuration, slideStartTime, slideEndTime;
 
       if (segment.isLastSegment) {
-        // For last segment, distribute time evenly among all slides
+        // For last segment, ensure each slide has enough time
         const totalSlides = Math.ceil(words.length / no_of_words);
-        const timePerSlide = (segment.end - segment.start) / totalSlides;
+        const timePerSlide = Math.max(3, (segment.end - segment.start) / totalSlides); // At least 3 seconds per slide
         slideStartTime = formatASSTime(segment.start + (i / no_of_words) * timePerSlide);
-        slideEndTime = formatASSTime(segment.start + ((i / no_of_words) + 1) * timePerSlide);
+        slideEndTime = formatASSTime(Math.min(segment.end, segment.start + ((i / no_of_words) + 1) * timePerSlide));
         slideDuration = timePerSlide;
+        
+        console.log(`Last segment slide ${i / no_of_words + 1}/${totalSlides}:`, {
+          text: slideText,
+          start: slideStartTime,
+          end: slideEndTime,
+          duration: slideDuration
+        });
       } else {
         slideDuration = (segment.end - segment.start) * (slideWords.length / words.length);
         slideStartTime = formatASSTime(segment.start + (i / words.length) * (segment.end - segment.start));
