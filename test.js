@@ -370,16 +370,20 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Calculate base duration first
     let baseDuration = video_details.reduce((sum, video) => sum + video.segmentDuration, 0);
+    
+    // Add extra buffer to ensure all text is displayed
+    const extraBuffer = 5;
+    baseDuration += extraBuffer;
 
     // Extract transcription details from video_details and adjust timing
     const transcription_details = video_details.map((video, index, array) => {
-      // For the last segment, extend the end time
+      // For the last segment, extend the end time to ensure all text is shown
       if (index === array.length - 1) {
         return {
           start: video.segmentStart,
-          end: baseDuration + 10, // Use full duration including buffer
+          end: Math.max(baseDuration, video.segmentEnd + extraBuffer), // Ensure we have enough time for the last segment
           text: video.transcriptionPart,
-          words: words ? words.filter(word => word.start >= video.segmentStart && word.end <= video.segmentEnd) : []
+          words: words ? words.filter(word => word.start >= video.segmentStart && word.end <= video.segmentEnd + extraBuffer) : []
         };
       }
       return {
@@ -466,7 +470,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Valid videos:', JSON.stringify(validVideos, null, 2));
 
     const videoLoop = validVideos;
-    totalVideoDuration = baseDuration + 10; // Add 10 seconds buffer
+    totalVideoDuration = baseDuration + extraBuffer;
 
     console.log('Video loop created with total duration:', totalVideoDuration);
 
@@ -764,7 +768,7 @@ Aspect Ratio: ${videoWidth}:${videoHeight}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${fontName},${font_size},&H00${colorText1.slice(1)},&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+Style: Default,${fontName},${font_size},&H${colorText1.slice(1).match(/../g).reverse().join('')},&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -826,12 +830,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             currentY += font_size;
           }
 
-          assContent += `Dialogue: 1,${slideStartTime},${slideEndTime},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1)}&}${word}\n`;
+          assContent += `Dialogue: 1,${slideStartTime},${slideEndTime},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&}${word}\n`;
 
           if (animation) {
             const wordStart = formatASSTime(segment.start + (i + j) * slideDuration / slideWords.length);
             const wordEnd = formatASSTime(segment.start + (i + j + 1) * slideDuration / slideWords.length);
-            assContent += `Dialogue: 0,${wordStart},${wordEnd},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1)}&\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
+            assContent += `Dialogue: 0,${wordStart},${wordEnd},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
           }
 
           currentX += wordWidth + wordSpacing;
