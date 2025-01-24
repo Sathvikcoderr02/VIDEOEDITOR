@@ -583,13 +583,18 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       try {
         let command = ffmpeg();
 
-        // Add inputs for all valid assets
-        validVideos.forEach((video, index) => {
+        // Add video inputs first
+        videoLoop.forEach((video) => {
           command = command.input(video.path);
         });
 
         // Add audio input
         command = command.input(extendedAudioPath);
+
+        // Add watermark input if needed
+        if (watermark) {
+          command = command.input(logoPath);
+        }
 
         let filterComplex = '';
 
@@ -603,11 +608,14 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
             return `[${i}:v]trim=0:${segmentDuration},setpts=PTS-STARTPTS,scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
           }).join('');
           
+          // Concatenate video segments
           filterComplex += validVideos.map((_, i) => `[v${i}]`).join('');
           filterComplex += `concat=n=${validVideos.length}:v=1:a=0[outv];`;
+          
+          // Add subtitles
           filterComplex += `[outv]ass=${subtitlePath}[outv_sub];`;
 
-          // Add progression bar filter only if show_progression_bar is true
+          // Add progression bar if enabled
           if (show_progression_bar) {
             filterComplex += `color=c=${colorText2}:s=${videoWidth}x80[bar];`;
             filterComplex += `[bar]split[bar1][bar2];`;
@@ -625,8 +633,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
           // Add watermark if enabled
           if (watermark) {
-            filterComplex += `;[${validVideos.length + 1}:v]format=rgba,colorchannelmixer=aa=0.2[logo];`;
-            filterComplex += `[outv_final][logo]overlay=W-w-10:H-h-10[outv_final]`;
+            filterComplex += `;[${validVideos.length + 1}:v]format=rgba,colorchannelmixer=aa=0.2[logo];[outv_final][logo]overlay=W-w-10:H-h-10[outv_final]`;
           }
         }
 
