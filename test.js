@@ -871,7 +871,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       for (let j = 0; j < slideWords.length; j++) {
         const word = slideWords[j];
         const wordDuration = Math.round(slideEnd / slideWords.length * 100);
-        lineContent += `{\\k${wordDuration}\\1c&HFFFFFF&\\3c&H000000&\\t(0,${wordDuration*10},\\1c&HFF0000&)}${word} `;
+        lineContent += `{\\k${wordDuration}\\1c&HFFFFFF&\\3c&H000000&\\t(0,${wordDuration*10},\\1c&HFF0000&)}${word.word} `;
       }
       assContent += `Dialogue: 0,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
     } else {
