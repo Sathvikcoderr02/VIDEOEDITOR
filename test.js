@@ -365,8 +365,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       duration: parseFloat(asset.videoDuration || asset.segmentDuration),
       segmentDuration: parseFloat(asset.segmentDuration),
       assetType: asset.assetUrl ? (asset.assetUrl.toLowerCase().endsWith('.mp4') ? 'video' : 'image') : 'video',
-      segmentStart: parseFloat(asset.segmentStart),
-      segmentEnd: parseFloat(asset.segmentEnd),
+      segmentStart: parseFloat(asset.segmentStart || 0),
+      segmentEnd: parseFloat(asset.segmentEnd || asset.segmentDuration),
       transcriptionPart: asset.transcriptionPart
     }));
 
@@ -626,11 +626,11 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         if (show_progression_bar) {
           filterComplex += 'color=c=' + colorText2 + ':s=' + videoWidth + 'x80[bar];';
           filterComplex += '[bar]split[bar1][bar2];';
-          filterComplex += '[bar1]trim=duration=' + totalVideoDuration + '[bar1];';
-          filterComplex += '[bar2]trim=duration=' + totalVideoDuration + ',geq='
-            + 'r=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
-            + 'g=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
-            + 'b=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
+          filterComplex += '[bar1]trim=duration=' + actualDuration + '[bar1];';
+          filterComplex += '[bar2]trim=duration=' + actualDuration + ',geq='
+            + 'r=\'if(lt(X,W*T/' + actualDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
+            + 'g=\'if(lt(X,W*T/' + actualDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
+            + 'b=\'if(lt(X,W*T/' + actualDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
             + '[colorbar];';
           filterComplex += '[bar1][colorbar]overlay[progressbar];';
           filterComplex += '[outv_sub][progressbar]overlay=0:0[outv_final]';
@@ -645,13 +645,12 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-map', `${validVideos.length}:a`,
           '-c:v', 'libx264',
           '-preset', 'medium',
-          '-threads', '2',
+          '-pix_fmt', 'yuv420p',
           '-c:a', 'aac',
-          '-shortest',
-          '-async', '1',
-          '-vsync', '1',
-          '-max_interleave_delta', '0',
-          '-t', `${totalVideoDuration}` // Explicitly set the total duration
+          '-strict', 'experimental',
+          '-b:a', '192k',
+          '-shortest', 
+          '-t', `${actualDuration}` // Use actualDuration instead of totalVideoDuration
         ];
 
         // Modify output options based on compression setting
