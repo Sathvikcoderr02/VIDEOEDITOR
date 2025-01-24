@@ -360,7 +360,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     let totalVideoDuration = actualDuration; // For progress bar
     console.log('Using duration:', actualDuration);
 
-    const video_details = apiData.video_details.map(asset => ({
+    const video_details = apiVideos.map(asset => ({
       url: asset.assetUrl || asset.videoUrl,
       duration: parseFloat(asset.videoDuration || asset.segmentDuration),
       segmentDuration: parseFloat(asset.segmentDuration),
