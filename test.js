@@ -600,24 +600,22 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           // Existing code for other styles
           validVideos.forEach((video, i) => {
             const segmentDuration = video.segmentDuration || video.duration;
-            const segmentStart = video.segmentStart || 0;
-            const segmentEnd = video.segmentEnd || segmentDuration;
             let inputPart = '';
             
             if (video.assetType === 'image') {
-              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS+${segmentStart}/TB,`;
-              const effect = getRandomEffect(videoWidth, videoHeight, segmentEnd - segmentStart);
+              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS,`;
+              const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
               inputPart += `${effect},`;
             } else {
-              inputPart = `[${i}:v]setpts=PTS-STARTPTS+${segmentStart}/TB,fps=25,`;
+              inputPart = `[${i}:v]setpts=PTS-STARTPTS,fps=25,`;
             }
             
-            filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,trim=0:${segmentEnd - segmentStart}[v${i}];`;
+            filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
           });
 
           // Concatenate all video parts
           const videoParts = validVideos.map((_, i) => `[v${i}]`).join('');
-          filterComplex += `${videoParts}concat=n=${validVideos.length}:v=1:a=0,fps=25[outv];`;
+          filterComplex += `${videoParts}concat=n=${validVideos.length}:v=1:a=0[outv];`;
         }
 
         // Add subtitles for all styles
