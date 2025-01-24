@@ -101,7 +101,7 @@ async function fetchDataFromAPI(text, language = 'en', options = {}, retries = 2
     animation = true,
     showProgressBar = true,
     watermark = true,
-    colorText1 = '#FFFFFF',
+    colorText1 = '#FF0000',
     colorText2 = '#000000',
     colorBg = '#FF00FF',
     positionY = 50,
@@ -870,8 +870,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       let lineContent = '';
       for (let j = 0; j < slideWords.length; j++) {
         const word = slideWords[j];
-        const wordDuration = Math.round(slideEnd / slideWords.length * 100);
-        lineContent += `{\\k${wordDuration}\\1c&HFFFFFF&\\3c&H000000&\\t(0,${wordDuration*10},\\1c&HFF0000&)}${word.word} `;
+        const wordDuration = Math.round((slideEnd - slideStart) / slideWords.length * 100);
+        lineContent += `{\\k${wordDuration}\\1c&HFFFFFF&\\3c&HFF0000&\\t(0,${wordDuration*10},\\1c&HFF0000&)}${word.word} `;
       }
       assContent += `Dialogue: 0,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
     } else {
