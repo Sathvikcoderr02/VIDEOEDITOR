@@ -606,11 +606,11 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
               inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS,`;
               const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
               inputPart += `${effect},`;
+              filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,trim=duration=${segmentDuration}[v${i}];`;
             } else {
               inputPart = `[${i}:v]setpts=PTS-STARTPTS,fps=25,`;
+              filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
             }
-            
-            filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
           });
 
           // Concatenate all video parts
