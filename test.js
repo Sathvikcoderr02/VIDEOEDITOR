@@ -603,15 +603,13 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
             let inputPart = '';
             
             if (video.assetType === 'image') {
-              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS,`;
+              inputPart = `[${i}:v]loop=loop=1:size=1:start=0,setpts=PTS-STARTPTS,`;
               const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
-              inputPart += `${effect},`;
+              inputPart += `${effect},trim=duration=${segmentDuration},setpts=PTS-STARTPTS,`;
             } else {
-              // For videos, ensure continuous playback
-              inputPart = `[${i}:v]setpts=PTS-STARTPTS,`;
+              inputPart = `[${i}:v]setpts=PTS-STARTPTS,trim=duration=${segmentDuration},setpts=PTS-STARTPTS,`;
             }
             
-            // Apply scaling and cropping consistently for all segments
             filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
                            `crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
           });
