@@ -603,26 +603,20 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
             let inputPart = '';
             
             if (video.assetType === 'image') {
-              // For images, ensure they loop enough to cover the full duration
               inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS,`;
               const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
               inputPart += `${effect},`;
             } else {
-              // For videos, handle the last segment differently
-              if (i === validVideos.length - 1) {
-                // For the last video segment, loop it to cover any remaining duration
-                inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS,`;
-              } else {
-                inputPart = `[${i}:v]trim=duration=${segmentDuration},setpts=PTS-STARTPTS,`;
-              }
+              // For videos, ensure continuous playback
+              inputPart = `[${i}:v]setpts=PTS-STARTPTS,`;
             }
             
+            // Apply scaling and cropping consistently for all segments
             filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
-                             `crop=${videoWidth}:${videoHeight},setsar=1,` +
-                             `trim=duration=${segmentDuration}[v${i}];`;
+                           `crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
           });
 
-          // Concatenate all video parts for other styles
+          // Concatenate all video parts
           const videoParts = validVideos.map((_, i) => `[v${i}]`).join('');
           filterComplex += `${videoParts}concat=n=${validVideos.length}:v=1:a=0[outv];`;
         }
@@ -818,78 +812,95 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   const wordSpacing = 0.1;
   const maxWidth = videoWidth - 20;
 
-  for (let segment of transcription_details) {
-    const startTime = formatASSTime(segment.start);
-    const endTime = formatASSTime(segment.end);
-    const words = segment.text.split(' ');
+  let allWords = transcription_details.flatMap(segment => 
+    (segment.words && segment.words.length > 0) ? segment.words : 
+    segment.text.split(' ').map((word, index, array) => ({
+      word,
+      start: segment.start + (index / array.length) * (segment.end - segment.start),
+      end: segment.start + ((index + 1) / array.length) * (segment.end - segment.start)
+    }))
+  );
 
-    console.log(`Processing segment: "${segment.text}"`);
-    console.log(`Number of words: ${words.length}, Words per slide: ${no_of_words}`);
+  let previousSlideEnd = 0;
 
-    for (let i = 0; i < words.length; i += no_of_words) {
-      const slideWords = words.slice(i, i + no_of_words);
-      const slideText = slideWords.join(' ');
-      let slideDuration, slideStartTime, slideEndTime;
+  for (let i = 0; i < allWords.length;) {
+    let slideWords = [];
+    let currentLineWidth = 0;
+    let lineCount = 0;
 
-      if (segment.isLastSegment) {
-        // For last segment, ensure each slide has enough time
-        const totalSlides = Math.ceil(words.length / no_of_words);
-        const timePerSlide = Math.max(3, (segment.end - segment.start) / totalSlides); // At least 3 seconds per slide
-        slideStartTime = formatASSTime(segment.start + (i / no_of_words) * timePerSlide);
-        slideEndTime = formatASSTime(Math.min(segment.end, segment.start + ((i / no_of_words) + 1) * timePerSlide));
-        slideDuration = timePerSlide;
-        
-        console.log(`Last segment slide ${i / no_of_words + 1}/${totalSlides}:`, {
-          text: slideText,
-          start: slideStartTime,
-          end: slideEndTime,
-          duration: slideDuration
-        });
+    while (slideWords.length < no_of_words && i < allWords.length) {
+      let nextWord = allWords[i];
+      let wordWidth = getTextWidth(nextWord.word, fontName, font_size);
+
+      if (currentLineWidth + wordWidth > maxWidth) {
+        lineCount++;
+        currentLineWidth = wordWidth;
       } else {
-        slideDuration = (segment.end - segment.start) * (slideWords.length / words.length);
-        slideStartTime = formatASSTime(segment.start + (i / words.length) * (segment.end - segment.start));
-        slideEndTime = formatASSTime(Math.min(segment.start + ((i + slideWords.length) / words.length) * (segment.end - segment.start), segment.end));
+        currentLineWidth += wordWidth + wordSpacing;
       }
 
-      // Check if this is a segment that needs center alignment (at 1 second or 11 seconds)
-      const needsCenterAlign = (segment.start === 1 || segment.start === 11);
+      slideWords.push(nextWord);
+      i++;
 
-      if (style === "style_2") {
-        let lineContent = '';
-        slideWords.forEach((word, index) => {
-          const wordStart = segment.start + (i + index) * (segment.end - segment.start) / words.length;
-          const wordEnd = wordStart + (segment.end - segment.start) / words.length;
-          lineContent += `{\\k${Math.round((wordEnd - wordStart) * 100)}\\1c&HFFFFFF&\\3c&H000000&\\t(${formatASSTime(wordStart)},${formatASSTime(wordEnd)},\\1c&H00FFFF&)}${word} `;
-        });
+      if (lineCount >= 2) {
+        break;
+      }
+    }
 
-        assContent += `Dialogue: 0,${slideStartTime},${slideEndTime},Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
-      } else {
-        // Style_1 and Style_3 rendering logic
-        let totalWidth = slideWords.reduce((sum, word) => sum + getTextWidth(word, fontName, font_size), 0) 
-                         + (slideWords.length - 1) * wordSpacing;
-        let startX = needsCenterAlign ? centerX : (centerX - (totalWidth / 2));
-        let currentX = startX;
-        let currentY = adjustedCenterY;
+    if (slideWords.length === 0) continue;
 
-        for (let j = 0; j < slideWords.length; j++) {
-          const word = slideWords[j];
-          const wordWidth = getTextWidth(word, fontName, font_size);
+    let slideStart = Math.max(slideWords[0].start, previousSlideEnd);
+    let slideEnd = slideWords[slideWords.length - 1].end;
 
-          if (currentX + wordWidth > centerX + (videoWidth - 20) / 2) {
-            currentX = needsCenterAlign ? centerX - (totalWidth / 2) : startX;
-            currentY += font_size;
-          }
+    // Ensure slide duration is not negative
+    if (slideEnd <= slideStart) {
+      slideEnd = slideStart + 0.1;
+    }
 
-          assContent += `Dialogue: 1,${slideStartTime},${slideEndTime},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&}${word}\n`;
+    previousSlideEnd = slideEnd;
 
-          if (animation) {
-            const wordStart = formatASSTime(segment.start + (i + j) * slideDuration / slideWords.length);
-            const wordEnd = formatASSTime(segment.start + (i + j + 1) * slideDuration / slideWords.length);
-            assContent += `Dialogue: 0,${wordStart},${wordEnd},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
-          }
+    let totalWidth = slideWords.reduce((sum, word) => sum + getTextWidth(word.word, fontName, font_size), 0) 
+                     + (slideWords.length - 1) * wordSpacing;
+    let startX = centerX - (totalWidth / 2);
 
-          currentX += wordWidth + wordSpacing;
+    let currentX = startX;
+    let currentY = centerY - (lineCount * font_size / 2);
+
+    // Render static words for the entire slide duration
+    for (let j = 0; j < slideWords.length; j++) {
+      let word = slideWords[j];
+      let wordWidth = getTextWidth(word.word, fontName, font_size);
+
+      if (currentX + wordWidth > centerX + maxWidth / 2) {
+        currentX = startX;
+        currentY += font_size;
+      }
+
+      assContent += `Dialogue: 1,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&}${word.word}\n`;
+
+      currentX += wordWidth + wordSpacing;
+    }
+
+    // Render moving highlights
+    if (animation) {
+      currentX = startX;
+      currentY = centerY - (lineCount * font_size / 2);
+
+      for (let j = 0; j < slideWords.length; j++) {
+        let word = slideWords[j];
+        let wordWidth = getTextWidth(word.word, fontName, font_size);
+
+        if (currentX + wordWidth > centerX + maxWidth / 2) {
+          currentX = startX;
+          currentY += font_size;
         }
+
+        let wordStart = Math.max(word.start, slideStart);
+        let wordEnd = Math.min(word.end, slideEnd);
+
+        assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
+
+        currentX += wordWidth + wordSpacing;
       }
     }
   }
