@@ -607,18 +607,15 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
               const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
               inputPart += `${effect},`;
             } else {
-              // For videos, ensure continuous playback
-              inputPart = `[${i}:v]setpts=PTS-STARTPTS,`;
+              inputPart = `[${i}:v]setpts=PTS-STARTPTS,fps=25,`;
             }
             
-            // Apply scaling and cropping consistently for all segments
-            filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
-                           `crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
+            filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,fps=25[v${i}];`;
           });
 
           // Concatenate all video parts
           const videoParts = validVideos.map((_, i) => `[v${i}]`).join('');
-          filterComplex += `${videoParts}concat=n=${validVideos.length}:v=1:a=0[outv];`;
+          filterComplex += `${videoParts}concat=n=${validVideos.length}:v=1:a=0,fps=25[outv];`;
         }
 
         // Add subtitles for all styles
