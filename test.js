@@ -101,7 +101,7 @@ async function fetchDataFromAPI(text, language = 'en', options = {}, retries = 2
     animation = true,
     showProgressBar = true,
     watermark = true,
-    colorText1 = '#FF0000',
+    colorText1 = '#FFFFFF',
     colorText2 = '#000000',
     colorBg = '#FF00FF',
     positionY = 50,
@@ -298,7 +298,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Extract data from API response
     let {
-      video_details: apiVideos,
+      videos: apiVideos,
       voiceoverUrl: audio_link,
       videoType: video_type,
       noOfWords: no_of_words,
@@ -356,7 +356,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     }
 
     // Add buffer to ensure all text is shown
-    actualDuration = actualDuration + 2; // Reduced from 10 to 2 seconds buffer
+    actualDuration = actualDuration + 10; // Add 10 seconds buffer
     let totalVideoDuration = actualDuration; // For progress bar
     console.log('Using duration:', actualDuration);
 
@@ -364,9 +364,9 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       url: asset.assetUrl || asset.videoUrl,
       duration: parseFloat(asset.videoDuration || asset.segmentDuration),
       segmentDuration: parseFloat(asset.segmentDuration),
-      segmentStart: parseFloat(asset.segmentStart || 0),
-      segmentEnd: parseFloat(asset.segmentEnd || asset.segmentDuration),
       assetType: asset.assetUrl ? (asset.assetUrl.toLowerCase().endsWith('.mp4') ? 'video' : 'image') : 'video',
+      segmentStart: parseFloat(asset.segmentStart),
+      segmentEnd: parseFloat(asset.segmentEnd),
       transcriptionPart: asset.transcriptionPart
     }));
 
@@ -376,7 +376,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     let baseDuration = video_details.reduce((sum, video) => sum + video.segmentDuration, 0);
     
     // Add extra buffer to ensure all text is displayed
-    const extraBuffer = 2; // Reduced from 5 to 2 seconds
+    const extraBuffer = 5;
     baseDuration += extraBuffer;
 
     // Log segment details for debugging
@@ -583,18 +583,13 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       try {
         let command = ffmpeg();
 
-        // Add video inputs first
-        videoLoop.forEach((video) => {
+        // Add inputs for all valid assets
+        validVideos.forEach((video, index) => {
           command = command.input(video.path);
         });
 
         // Add audio input
         command = command.input(extendedAudioPath);
-
-        // Add watermark input if needed
-        if (watermark) {
-          command = command.input(logoPath);
-        }
 
         let filterComplex = '';
 
@@ -603,38 +598,46 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           filterComplex = addImageAnimationsStyle4(validVideos, videoWidth, videoHeight);
         } else {
           // Existing code for other styles
-          filterComplex = validVideos.map((video, i) => {
-            const segmentDuration = video.segmentDuration.toFixed(3);
-            return `[${i}:v]trim=0:${segmentDuration},setpts=PTS-STARTPTS,scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
-          }).join('');
-          
-          // Concatenate video segments
-          filterComplex += validVideos.map((_, i) => `[v${i}]`).join('');
-          filterComplex += `concat=n=${validVideos.length}:v=1:a=0[outv];`;
-          
-          // Add subtitles
-          filterComplex += `[outv]ass=${subtitlePath}[outv_sub];`;
+          validVideos.forEach((video, i) => {
+            const segmentDuration = video.segmentDuration || video.duration;
+            let inputPart = '';
+            
+            if (video.assetType === 'image') {
+              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS,`;
+              const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
+              inputPart += `${effect},`;
+            } else {
+              // For videos, ensure continuous playback
+              inputPart = `[${i}:v]setpts=PTS-STARTPTS,`;
+            }
+            
+            // Apply scaling and cropping consistently for all segments
+            filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
+                           `crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
+          });
 
-          // Add progression bar if enabled
-          if (show_progression_bar) {
-            filterComplex += `color=c=${colorText2}:s=${videoWidth}x80[bar];`;
-            filterComplex += `[bar]split[bar1][bar2];`;
-            filterComplex += `[bar1]trim=duration=${actualDuration}[bar1];`;
-            filterComplex += `[bar2]trim=duration=${actualDuration},geq=`
-              + `r='if(lt(X,W*T/${actualDuration}),${parseInt(colorBg.slice(1, 3), 16)},${parseInt(colorText2.slice(1, 3), 16)})':`
-              + `g='if(lt(X,W*T/${actualDuration}),${parseInt(colorBg.slice(3, 5), 16)},${parseInt(colorText2.slice(3, 5), 16)})':`
-              + `b='if(lt(X,W*T/${actualDuration}),${parseInt(colorBg.slice(5, 7), 16)},${parseInt(colorText2.slice(5, 7), 16)})'`
-              + `[colorbar];`;
-            filterComplex += `[bar1][colorbar]overlay[progressbar];`;
-            filterComplex += `[outv_sub][progressbar]overlay=0:0[outv_final]`;
-          } else {
-            filterComplex += `[outv_sub]copy[outv_final]`;
-          }
+          // Concatenate all video parts
+          const videoParts = validVideos.map((_, i) => `[v${i}]`).join('');
+          filterComplex += `${videoParts}concat=n=${validVideos.length}:v=1:a=0[outv];`;
+        }
 
-          // Add watermark if enabled
-          if (watermark) {
-            filterComplex += `;[${validVideos.length + 1}:v]format=rgba,colorchannelmixer=aa=0.2[logo];[outv_final][logo]overlay=W-w-10:H-h-10[outv_final]`;
-          }
+        // Add subtitles for all styles
+        filterComplex += `[outv]ass=${subtitlePath}:fontsdir=${path.dirname(fontPath)}[outv_sub];`;
+
+        // Add progression bar filter only if show_progression_bar is true
+        if (show_progression_bar) {
+          filterComplex += 'color=c=' + colorText2 + ':s=' + videoWidth + 'x80[bar];';
+          filterComplex += '[bar]split[bar1][bar2];';
+          filterComplex += '[bar1]trim=duration=' + totalVideoDuration + '[bar1];';
+          filterComplex += '[bar2]trim=duration=' + totalVideoDuration + ',geq='
+            + 'r=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
+            + 'g=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
+            + 'b=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
+            + '[colorbar];';
+          filterComplex += '[bar1][colorbar]overlay[progressbar];';
+          filterComplex += '[outv_sub][progressbar]overlay=0:0[outv_final]';
+        } else {
+          filterComplex += '[outv_sub]copy[outv_final]';
         }
 
         console.log("Full filterComplex:", filterComplex);
@@ -863,16 +866,26 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     let currentX = startX;
     let currentY = centerY - (lineCount * font_size / 2);
 
-    if (style === "style_2") {
-      let lineContent = '';
-      for (let j = 0; j < slideWords.length; j++) {
-        const word = slideWords[j];
-        const wordDuration = Math.round((slideEnd - slideStart) / slideWords.length * 100);
-        lineContent += `{\\k${wordDuration}\\1c&HFFFFFF&\\3c&HFF0000&\\t(0,${wordDuration*10},\\1c&HFF0000&)}${word.word} `;
+    // Render static words for the entire slide duration
+    for (let j = 0; j < slideWords.length; j++) {
+      let word = slideWords[j];
+      let wordWidth = getTextWidth(word.word, fontName, font_size);
+
+      if (currentX + wordWidth > centerX + maxWidth / 2) {
+        currentX = startX;
+        currentY += font_size;
       }
-      assContent += `Dialogue: 0,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
-    } else {
-      // Render static words for the entire slide duration
+
+      assContent += `Dialogue: 1,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&}${word.word}\n`;
+
+      currentX += wordWidth + wordSpacing;
+    }
+
+    // Render moving highlights
+    if (animation) {
+      currentX = startX;
+      currentY = centerY - (lineCount * font_size / 2);
+
       for (let j = 0; j < slideWords.length; j++) {
         let word = slideWords[j];
         let wordWidth = getTextWidth(word.word, fontName, font_size);
@@ -882,32 +895,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           currentY += font_size;
         }
 
-        assContent += `Dialogue: 1,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&}${word.word}\n`;
+        let wordStart = Math.max(word.start, slideStart);
+        let wordEnd = Math.min(word.end, slideEnd);
+
+        assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
 
         currentX += wordWidth + wordSpacing;
-      }
-
-      // Render moving highlights
-      if (animation) {
-        currentX = startX;
-        currentY = centerY - (lineCount * font_size / 2);
-
-        for (let j = 0; j < slideWords.length; j++) {
-          let word = slideWords[j];
-          let wordWidth = getTextWidth(word.word, fontName, font_size);
-
-          if (currentX + wordWidth > centerX + maxWidth / 2) {
-            currentX = startX;
-            currentY += font_size;
-          }
-
-          let wordStart = Math.max(word.start, slideStart);
-          let wordEnd = Math.min(word.end, slideEnd);
-
-          assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
-
-          currentX += wordWidth + wordSpacing;
-        }
       }
     }
   }
