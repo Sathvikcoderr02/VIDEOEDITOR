@@ -356,7 +356,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     }
 
     // Add buffer to ensure all text is shown
-    actualDuration = actualDuration + 10; // Add 10 seconds buffer
+    actualDuration = actualDuration + 2; // Reduced from 10 to 2 seconds buffer
     let totalVideoDuration = actualDuration; // For progress bar
     console.log('Using duration:', actualDuration);
 
@@ -376,7 +376,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     let baseDuration = video_details.reduce((sum, video) => sum + video.segmentDuration, 0);
     
     // Add extra buffer to ensure all text is displayed
-    const extraBuffer = 5;
+    const extraBuffer = 2; // Reduced from 5 to 2 seconds
     baseDuration += extraBuffer;
 
     // Log segment details for debugging
@@ -866,26 +866,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     let currentX = startX;
     let currentY = centerY - (lineCount * font_size / 2);
 
-    // Render static words for the entire slide duration
-    for (let j = 0; j < slideWords.length; j++) {
-      let word = slideWords[j];
-      let wordWidth = getTextWidth(word.word, fontName, font_size);
+    if (style === "style_2") {
+      let lineContent = '';
+      slideWords.forEach((word, index) => {
+        const wordStart = segment.start + (i + index) * (segment.end - segment.start) / words.length;
+        const wordEnd = wordStart + (segment.end - segment.start) / words.length;
+        const duration = Math.round((wordEnd - wordStart) * 100);
+        lineContent += `{\\k${duration}\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&\\3c&H000000&\\t(0,${duration*10},\\1c&H${colorText2.slice(1).match(/../g).reverse().join('')}&)}${word} `;
+      });
 
-      if (currentX + wordWidth > centerX + maxWidth / 2) {
-        currentX = startX;
-        currentY += font_size;
-      }
-
-      assContent += `Dialogue: 1,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&}${word.word}\n`;
-
-      currentX += wordWidth + wordSpacing;
-    }
-
-    // Render moving highlights
-    if (animation) {
-      currentX = startX;
-      currentY = centerY - (lineCount * font_size / 2);
-
+      assContent += `Dialogue: 0,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
+    } else {
+      // Render static words for the entire slide duration
       for (let j = 0; j < slideWords.length; j++) {
         let word = slideWords[j];
         let wordWidth = getTextWidth(word.word, fontName, font_size);
@@ -895,12 +887,32 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           currentY += font_size;
         }
 
-        let wordStart = Math.max(word.start, slideStart);
-        let wordEnd = Math.min(word.end, slideEnd);
-
-        assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
+        assContent += `Dialogue: 1,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&}${word.word}\n`;
 
         currentX += wordWidth + wordSpacing;
+      }
+
+      // Render moving highlights
+      if (animation) {
+        currentX = startX;
+        currentY = centerY - (lineCount * font_size / 2);
+
+        for (let j = 0; j < slideWords.length; j++) {
+          let word = slideWords[j];
+          let wordWidth = getTextWidth(word.word, fontName, font_size);
+
+          if (currentX + wordWidth > centerX + maxWidth / 2) {
+            currentX = startX;
+            currentY += font_size;
+          }
+
+          let wordStart = Math.max(word.start, slideStart);
+          let wordEnd = Math.min(word.end, slideEnd);
+
+          assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
+
+          currentX += wordWidth + wordSpacing;
+        }
       }
     }
   }
