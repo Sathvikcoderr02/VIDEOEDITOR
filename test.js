@@ -598,43 +598,36 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           filterComplex = addImageAnimationsStyle4(validVideos, videoWidth, videoHeight);
         } else {
           // Existing code for other styles
-          validVideos.forEach((video, i) => {
-            const segmentDuration = video.segmentDuration || video.duration;
-            let inputPart = '';
-            
-            if (video.assetType === 'image') {
-              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS,`;
-              const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
-              inputPart += `${effect},`;
-              filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,trim=0:${segmentDuration},setpts=PTS-STARTPTS[v${i}];`;
-            } else {
-              inputPart = `[${i}:v]setpts=PTS-STARTPTS,fps=25,`;
-              filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,trim=0:${segmentDuration},setpts=PTS-STARTPTS[v${i}];`;
-            }
-          });
+          filterComplex = validVideos.map((video, i) => {
+            const segmentDuration = video.segmentDuration.toFixed(3);
+            return `[${i}:v]trim=0:${segmentDuration},setpts=PTS-STARTPTS,scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
+          }).join('');
+          
+          filterComplex += validVideos.map((_, i) => `[v${i}]`).join('');
+          filterComplex += `concat=n=${validVideos.length}:v=1:a=0[outv];`;
+          filterComplex += `[outv]ass=${subtitlePath}[outv_sub];`;
 
-          // Concatenate all video parts
-          const videoParts = validVideos.map((_, i) => `[v${i}]`).join('');
-          filterComplex += `${videoParts}concat=n=${validVideos.length}:v=1:a=0,tpad=stop_mode=clone:stop_duration=${Math.max(0, actualDuration - baseDuration)}[outv];`;
-        }
+          // Add progression bar filter only if show_progression_bar is true
+          if (show_progression_bar) {
+            filterComplex += `color=c=${colorText2}:s=${videoWidth}x80[bar];`;
+            filterComplex += `[bar]split[bar1][bar2];`;
+            filterComplex += `[bar1]trim=duration=${actualDuration}[bar1];`;
+            filterComplex += `[bar2]trim=duration=${actualDuration},geq=`
+              + `r='if(lt(X,W*T/${actualDuration}),${parseInt(colorBg.slice(1, 3), 16)},${parseInt(colorText2.slice(1, 3), 16)})':`
+              + `g='if(lt(X,W*T/${actualDuration}),${parseInt(colorBg.slice(3, 5), 16)},${parseInt(colorText2.slice(3, 5), 16)})':`
+              + `b='if(lt(X,W*T/${actualDuration}),${parseInt(colorBg.slice(5, 7), 16)},${parseInt(colorText2.slice(5, 7), 16)})'`
+              + `[colorbar];`;
+            filterComplex += `[bar1][colorbar]overlay[progressbar];`;
+            filterComplex += `[outv_sub][progressbar]overlay=0:0[outv_final]`;
+          } else {
+            filterComplex += `[outv_sub]copy[outv_final]`;
+          }
 
-        // Add subtitles for all styles
-        filterComplex += `[outv]ass=${subtitlePath}:fontsdir=${path.dirname(fontPath)}[outv_sub];`;
-
-        // Add progression bar filter only if show_progression_bar is true
-        if (show_progression_bar) {
-          filterComplex += 'color=c=' + colorText2 + ':s=' + videoWidth + 'x80[bar];';
-          filterComplex += '[bar]split[bar1][bar2];';
-          filterComplex += '[bar1]trim=duration=' + totalVideoDuration + '[bar1];';
-          filterComplex += '[bar2]trim=duration=' + totalVideoDuration + ',geq='
-            + 'r=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
-            + 'g=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
-            + 'b=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
-            + '[colorbar];';
-          filterComplex += '[bar1][colorbar]overlay[progressbar];';
-          filterComplex += '[outv_sub][progressbar]overlay=0:0[outv_final]';
-        } else {
-          filterComplex += '[outv_sub]copy[outv_final]';
+          // Add watermark if enabled
+          if (watermark) {
+            filterComplex += `;[${validVideos.length + 1}:v]format=rgba,colorchannelmixer=aa=0.2[logo];`;
+            filterComplex += `[outv_final][logo]overlay=W-w-10:H-h-10[outv_final]`;
+          }
         }
 
         console.log("Full filterComplex:", filterComplex);
