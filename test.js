@@ -298,7 +298,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Extract data from API response
     let {
-      videos: apiVideos,
+      video_details: apiVideos,
       voiceoverUrl: audio_link,
       videoType: video_type,
       noOfWords: no_of_words,
@@ -360,13 +360,13 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     let totalVideoDuration = actualDuration; // For progress bar
     console.log('Using duration:', actualDuration);
 
-    const video_details = apiVideos.map(asset => ({
+    const video_details = apiData.video_details.map(asset => ({
       url: asset.assetUrl || asset.videoUrl,
       duration: parseFloat(asset.videoDuration || asset.segmentDuration),
       segmentDuration: parseFloat(asset.segmentDuration),
+      segmentStart: parseFloat(asset.segmentStart || 0),
+      segmentEnd: parseFloat(asset.segmentEnd || asset.segmentDuration),
       assetType: asset.assetUrl ? (asset.assetUrl.toLowerCase().endsWith('.mp4') ? 'video' : 'image') : 'video',
-      segmentStart: parseFloat(asset.segmentStart),
-      segmentEnd: parseFloat(asset.segmentEnd),
       transcriptionPart: asset.transcriptionPart
     }));
 
@@ -600,17 +600,19 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           // Existing code for other styles
           validVideos.forEach((video, i) => {
             const segmentDuration = video.segmentDuration || video.duration;
+            const segmentStart = video.segmentStart || 0;
+            const segmentEnd = video.segmentEnd || segmentDuration;
             let inputPart = '';
             
             if (video.assetType === 'image') {
-              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS,`;
-              const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
+              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=PTS-STARTPTS+${segmentStart}/TB,`;
+              const effect = getRandomEffect(videoWidth, videoHeight, segmentEnd - segmentStart);
               inputPart += `${effect},`;
             } else {
-              inputPart = `[${i}:v]setpts=PTS-STARTPTS,fps=25,`;
+              inputPart = `[${i}:v]setpts=PTS-STARTPTS+${segmentStart}/TB,fps=25,`;
             }
             
-            filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,fps=25[v${i}];`;
+            filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,trim=0:${segmentEnd - segmentStart}[v${i}];`;
           });
 
           // Concatenate all video parts
