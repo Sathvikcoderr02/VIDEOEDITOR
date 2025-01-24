@@ -868,13 +868,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     if (style === "style_2") {
       let lineContent = '';
-      slideWords.forEach((word, index) => {
-        const wordStart = segment.start + (i + index) * (segment.end - segment.start) / words.length;
-        const wordEnd = wordStart + (segment.end - segment.start) / words.length;
-        const duration = Math.round((wordEnd - wordStart) * 100);
-        lineContent += `{\\k${duration}\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&\\3c&H000000&\\t(0,${duration*10},\\1c&H${colorText2.slice(1).match(/../g).reverse().join('')}&)}${word} `;
-      });
-
+      for (let j = 0; j < slideWords.length; j++) {
+        const word = slideWords[j];
+        const wordDuration = Math.round(slideEnd / slideWords.length * 100);
+        lineContent += `{\\k${wordDuration}\\1c&HFFFFFF&\\3c&H000000&\\t(0,${wordDuration*10},\\1c&HFF0000&)}${word} `;
+      }
       assContent += `Dialogue: 0,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
     } else {
       // Render static words for the entire slide duration
