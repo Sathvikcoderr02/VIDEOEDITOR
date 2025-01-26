@@ -365,8 +365,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       duration: parseFloat(asset.videoDuration || asset.segmentDuration),
       segmentDuration: parseFloat(asset.segmentDuration),
       assetType: asset.assetUrl ? (asset.assetUrl.toLowerCase().endsWith('.mp4') ? 'video' : 'image') : 'video',
-      segmentStart: parseFloat(asset.segmentStart || 0),
-      segmentEnd: parseFloat(asset.segmentEnd || asset.segmentDuration),
+      segmentStart: parseFloat(asset.segmentStart),
+      segmentEnd: parseFloat(asset.segmentEnd),
       transcriptionPart: asset.transcriptionPart
     }));
 
@@ -603,13 +603,15 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
             let inputPart = '';
             
             if (video.assetType === 'image') {
-              inputPart = `[${i}:v]loop=loop=1:size=1:start=0,setpts=PTS-STARTPTS,`;
+              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=N/FRAME_RATE/TB,`;
               const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
-              inputPart += `${effect},trim=duration=${segmentDuration},setpts=PTS-STARTPTS,`;
+              inputPart += `${effect},trim=duration=${segmentDuration},setpts=N/FRAME_RATE/TB,`;
             } else {
-              inputPart = `[${i}:v]setpts=PTS-STARTPTS,trim=duration=${segmentDuration},setpts=PTS-STARTPTS,`;
+              // For videos, ensure continuous playback
+              inputPart = `[${i}:v]setpts=N/FRAME_RATE/TB,trim=duration=${segmentDuration},setpts=N/FRAME_RATE/TB,`;
             }
             
+            // Apply scaling and cropping consistently for all segments
             filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
                            `crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
           });
@@ -626,11 +628,11 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         if (show_progression_bar) {
           filterComplex += 'color=c=' + colorText2 + ':s=' + videoWidth + 'x80[bar];';
           filterComplex += '[bar]split[bar1][bar2];';
-          filterComplex += '[bar1]trim=duration=' + actualDuration + '[bar1];';
-          filterComplex += '[bar2]trim=duration=' + actualDuration + ',geq='
-            + 'r=\'if(lt(X,W*T/' + actualDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
-            + 'g=\'if(lt(X,W*T/' + actualDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
-            + 'b=\'if(lt(X,W*T/' + actualDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
+          filterComplex += '[bar1]trim=duration=' + totalVideoDuration + '[bar1];';
+          filterComplex += '[bar2]trim=duration=' + totalVideoDuration + ',geq='
+            + 'r=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
+            + 'g=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
+            + 'b=\'if(lt(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
             + '[colorbar];';
           filterComplex += '[bar1][colorbar]overlay[progressbar];';
           filterComplex += '[outv_sub][progressbar]overlay=0:0[outv_final]';
@@ -645,12 +647,13 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-map', `${validVideos.length}:a`,
           '-c:v', 'libx264',
           '-preset', 'medium',
-          '-pix_fmt', 'yuv420p',
+          '-threads', '2',
           '-c:a', 'aac',
-          '-strict', 'experimental',
-          '-b:a', '192k',
-          '-shortest', 
-          '-t', `${actualDuration}` // Use actualDuration instead of totalVideoDuration
+          '-shortest',
+          '-async', '1',
+          '-vsync', '1',
+          '-max_interleave_delta', '0',
+          '-t', `${totalVideoDuration}` // Explicitly set the total duration
         ];
 
         // Modify output options based on compression setting
@@ -1339,4 +1342,160 @@ async function verifyFile(filePath) {
     console.error(`Error: ${error.message}`);
     return false;
   }
+}
+
+async function createASSSubtitleFile(transcription_details, outputPath, no_of_words, font_size, animation, videoWidth, videoHeight, actualDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar) {
+  const assHeader = `[Script Info]
+ScriptType: v4.00+
+PlayResX: ${videoWidth} 
+PlayResY: ${videoHeight}
+Aspect Ratio: ${videoWidth}:${videoHeight}
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,${fontName},${font_size},&H${colorText1.slice(1).match(/../g).reverse().join('')},&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`;
+
+  let assContent = assHeader;
+  const barHeight = Math.round(videoHeight * 0.02); // 2% of video height
+  const centerY = video_type === "square" 
+    ? videoHeight / 2 
+    : (videoHeight * positionY) / 100;
+
+  // Adjust centerY to account for the progression bar
+  const adjustedCenterY = show_progression_bar 
+    ? Math.max(centerY, barHeight + font_size / 2) 
+    : centerY;
+
+  const centerX = videoWidth / 2;
+  const wordSpacing = 0.1;
+  const maxWidth = videoWidth - 20;
+
+  let allWords = transcription_details.flatMap(segment => 
+    (segment.words && segment.words.length > 0) ? segment.words : 
+    segment.text.split(' ').map((word, index, array) => ({
+      word,
+      start: segment.start + (index / array.length) * (segment.end - segment.start),
+      end: segment.start + ((index + 1) / array.length) * (segment.end - segment.start)
+    }))
+  );
+
+  let previousSlideEnd = 0;
+
+  for (let i = 0; i < allWords.length;) {
+    let slideWords = [];
+    let currentLineWidth = 0;
+    let lineCount = 0;
+
+    while (slideWords.length < no_of_words && i < allWords.length) {
+      let nextWord = allWords[i];
+      let wordWidth = getTextWidth(nextWord.word, fontName, font_size);
+
+      if (currentLineWidth + wordWidth > maxWidth) {
+        lineCount++;
+        currentLineWidth = wordWidth;
+      } else {
+        currentLineWidth += wordWidth + wordSpacing;
+      }
+
+      slideWords.push(nextWord);
+      i++;
+
+      if (lineCount >= 2) {
+        break;
+      }
+    }
+
+    if (slideWords.length === 0) continue;
+
+    let slideStart = Math.max(slideWords[0].start, previousSlideEnd);
+    let slideEnd = slideWords[slideWords.length - 1].end;
+
+    // Ensure slide duration is not negative
+    if (slideEnd <= slideStart) {
+      slideEnd = slideStart + 0.1;
+    }
+
+    previousSlideEnd = slideEnd;
+
+    let totalWidth = slideWords.reduce((sum, word) => sum + getTextWidth(word.word, fontName, font_size), 0) 
+                     + (slideWords.length - 1) * wordSpacing;
+    let startX = centerX - (totalWidth / 2);
+
+    let currentX = startX;
+    let currentY = centerY - (lineCount * font_size / 2);
+
+    // Render static words for the entire slide duration
+    for (let j = 0; j < slideWords.length; j++) {
+      let word = slideWords[j];
+      let wordWidth = getTextWidth(word.word, fontName, font_size);
+
+      if (currentX + wordWidth > centerX + maxWidth / 2) {
+        currentX = startX;
+        currentY += font_size;
+      }
+
+      assContent += `Dialogue: 1,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&}${word.word}\n`;
+
+      currentX += wordWidth + wordSpacing;
+    }
+
+    // Render moving highlights
+    if (animation) {
+      currentX = startX;
+      currentY = centerY - (lineCount * font_size / 2);
+
+      for (let j = 0; j < slideWords.length; j++) {
+        let word = slideWords[j];
+        let wordWidth = getTextWidth(word.word, fontName, font_size);
+
+        if (currentX + wordWidth > centerX + maxWidth / 2) {
+          currentX = startX;
+          currentY += font_size;
+        }
+
+        let wordStart = Math.max(word.start, slideStart);
+        let wordEnd = Math.min(word.end, slideEnd);
+
+        assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
+
+        currentX += wordWidth + wordSpacing;
+      }
+    }
+  }
+
+  if (style === 'style_2') {
+    for (let segment of transcription_details) {
+      const startTime = formatASSTime(segment.start);
+      const endTime = formatASSTime(segment.end);
+      const words = segment.text.split(' ');
+
+      for (let i = 0; i < words.length; i += no_of_words) {
+        const slideWords = words.slice(i, i + no_of_words);
+        const slideText = slideWords.join(' ');
+        const slideDuration = (segment.end - segment.start) * (slideWords.length / words.length);
+        const slideStartTime = formatASSTime(segment.start + (i / words.length) * (segment.end - segment.start));
+        const slideEndTime = formatASSTime(Math.min(segment.start + ((i + slideWords.length) / words.length) * (segment.end - segment.start), segment.end));
+
+        // Check if this is a segment that needs center alignment (at 1 second or 11 seconds)
+        const needsCenterAlign = (segment.start === 1 || segment.start === 11);
+
+        let lineContent = '';
+        slideWords.forEach((word, index) => {
+          const wordStart = segment.start + (i + index) * (segment.end - segment.start) / words.length;
+          const wordEnd = wordStart + (segment.end - segment.start) / words.length;
+          lineContent += `{\\k${Math.round((wordEnd - wordStart) * 100)}\\1c&HFFFFFF&\\3c&H000000&\\t(${formatASSTime(wordStart)},${formatASSTime(wordEnd)},\\1c&H00FFFF&)}${word} `;
+        });
+
+        assContent += `Dialogue: 0,${slideStartTime},${slideEndTime},Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
+      }
+    }
+  }
+
+  await fsp.writeFile(outputPath, assContent);
+  console.log(`ASS subtitle file created at: ${outputPath}`);
+  console.log('Subtitle content preview:', assContent.substring(0, 500));
 }
