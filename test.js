@@ -349,10 +349,10 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     // Handle duration with proper validation
     let actualDuration = parseFloat(apiDuration);
     console.log('API duration:', actualDuration);
-    
+
     if (isNaN(actualDuration) || actualDuration <= 0) {
       console.warn('Invalid actualDuration:', actualDuration);
-      actualDuration = calculatedDuration;
+      actualDuration = Math.max(36, calculatedDuration); // Ensure minimum 36 seconds or calculated duration
     }
 
     // Add buffer to ensure all text is shown
@@ -491,8 +491,6 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Valid videos:', JSON.stringify(validVideos, null, 2));
 
     const videoLoop = validVideos;
-    totalVideoDuration = baseDuration + extraBuffer;
-
     console.log('Video loop created with total duration:', totalVideoDuration);
 
     // Handle font information
