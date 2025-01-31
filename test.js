@@ -343,7 +343,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Calculate required duration based on text length
     const wordCount = text.split(' ').length;
-    const wordsPerSecond = 1.5; // Slower speed for better readability
+    const wordsPerSecond = 1.2; // Slower speed for better readability of longer texts
     const calculatedDuration = Math.ceil(wordCount / wordsPerSecond);
     
     // Handle duration with proper validation
@@ -353,12 +353,15 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     if (isNaN(actualDuration) || actualDuration <= 0) {
       console.warn('Invalid actualDuration:', actualDuration);
       actualDuration = Math.max(36, calculatedDuration); // Ensure minimum 36 seconds or calculated duration
+    } else {
+      // For longer texts, use the calculated duration if it's longer
+      actualDuration = Math.max(actualDuration, calculatedDuration);
     }
 
     // Add buffer to ensure all text is shown
-    actualDuration = actualDuration + 10; // Add 10 seconds buffer
+    actualDuration = actualDuration + 15; // Add 15 seconds buffer for longer texts
     let totalVideoDuration = actualDuration; // For progress bar
-    console.log('Using duration:', actualDuration);
+    console.log('Using duration:', actualDuration, 'for word count:', wordCount);
 
     const video_details = apiVideos.map(asset => ({
       url: asset.assetUrl || asset.videoUrl,
