@@ -489,26 +489,26 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Valid videos:', JSON.stringify(validVideos, null, 2));
 
     const videoLoop = [];
-    let currentDuration = 0;
+    let totalVideoDuration = 0;
 
     // Add all videos except the last one
     for (let i = 0; i < validVideos.length - 1; i++) {
       videoLoop.push(validVideos[i]);
-      currentDuration += parseFloat(validVideos[i].segmentDuration);
+      totalVideoDuration += parseFloat(validVideos[i].segmentDuration);
     }
 
-    // Loop only the last video until we reach required duration
+    // Get the last video and loop it until text completes
     const lastVideo = validVideos[validVideos.length - 1];
-    const lastSegmentDuration = transcription_details[transcription_details.length - 1].segmentDuration;
-    
-    while (currentDuration < lastSegmentDuration) {
-      const remainingDuration = lastSegmentDuration - currentDuration;
+    const textDuration = Math.max(36, (wordCount / 150) * 60) + 5; // At least 36 seconds + 5s buffer
+
+    while (totalVideoDuration < textDuration) {
+      const remainingDuration = textDuration - totalVideoDuration;
       const segmentDuration = Math.min(parseFloat(lastVideo.segmentDuration), remainingDuration);
       videoLoop.push({...lastVideo, segmentDuration});
-      currentDuration += segmentDuration;
+      totalVideoDuration += segmentDuration;
     }
 
-    console.log('Video loop created with total duration:', currentDuration);
+    console.log('Video loop created with total duration:', totalVideoDuration);
 
     // Handle font information
     let fontPath;
