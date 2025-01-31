@@ -359,7 +359,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     }
 
     // Add buffer to ensure all text is shown
-    actualDuration = actualDuration + 15; // Add 15 seconds buffer for longer texts
+    actualDuration = actualDuration + 10; // Add 10 seconds buffer
     let totalVideoDuration = actualDuration; // For progress bar
     console.log('Using duration:', actualDuration, 'for word count:', wordCount);
 
@@ -493,7 +493,21 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     console.log('Valid videos:', JSON.stringify(validVideos, null, 2));
 
-    const videoLoop = validVideos;
+    const videoLoop = [];
+    let currentDuration = 0;
+
+    // Keep adding videos until we reach the required duration
+    while (currentDuration < totalVideoDuration) {
+      for (const video of validVideos) {
+        const remainingDuration = totalVideoDuration - currentDuration;
+        if (remainingDuration <= 0) break;
+        
+        const segmentDuration = Math.min(parseFloat(video.segmentDuration), remainingDuration);
+        videoLoop.push({...video, segmentDuration});
+        currentDuration += segmentDuration;
+      }
+    }
+
     console.log('Video loop created with total duration:', totalVideoDuration);
 
     // Handle font information
