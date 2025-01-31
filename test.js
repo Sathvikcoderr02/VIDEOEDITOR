@@ -499,12 +499,19 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Get last video and ensure transcript completion
     const lastVideo = validVideos[validVideos.length - 1];
-    const finalDuration = transcription_details[transcription_details.length - 1].end + 5;
-
-    while (totalVideoDuration < finalDuration) {
+    const lastSegmentEnd = transcription_details[transcription_details.length - 1].end;
+    
+    // First reach transcript end
+    while (totalVideoDuration < lastSegmentEnd) {
       videoLoop.push({...lastVideo});
       totalVideoDuration += parseFloat(lastVideo.segmentDuration);
     }
+    
+    // Then add one full segment for smooth 5s buffer
+    const fullSegment = {...lastVideo};
+    fullSegment.segmentDuration = 5.0; // Explicit 5 second duration
+    videoLoop.push(fullSegment);
+    totalVideoDuration += 5.0;
 
     console.log('Video loop created with total duration:', totalVideoDuration);
 
