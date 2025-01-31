@@ -398,7 +398,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       // For the last segment, extend the end time to ensure all text is shown
       if (index === array.length - 1) {
         const lastSegmentDuration = Math.max(15, video.segmentDuration); // Ensure at least 15 seconds for last segment
-        const extendedEnd = video.segmentStart + lastSegmentDuration + extraBuffer;
+        const extendedEnd = video.segmentStart + lastSegmentDuration + 10; // Add 10s buffer for last segment
         const segment = {
           start: video.segmentStart,
           end: extendedEnd,
@@ -496,16 +496,19 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     const videoLoop = [];
     let currentDuration = 0;
 
-    // Keep adding videos until we reach the required duration
+    // Add all videos except the last one
+    for (let i = 0; i < validVideos.length - 1; i++) {
+      videoLoop.push(validVideos[i]);
+      currentDuration += parseFloat(validVideos[i].segmentDuration);
+    }
+
+    // Loop only the last video until we reach required duration
+    const lastVideo = validVideos[validVideos.length - 1];
     while (currentDuration < totalVideoDuration) {
-      for (const video of validVideos) {
-        const remainingDuration = totalVideoDuration - currentDuration;
-        if (remainingDuration <= 0) break;
-        
-        const segmentDuration = Math.min(parseFloat(video.segmentDuration), remainingDuration);
-        videoLoop.push({...video, segmentDuration});
-        currentDuration += segmentDuration;
-      }
+      const remainingDuration = totalVideoDuration - currentDuration;
+      const segmentDuration = Math.min(parseFloat(lastVideo.segmentDuration), remainingDuration);
+      videoLoop.push({...lastVideo, segmentDuration});
+      currentDuration += segmentDuration;
     }
 
     console.log('Video loop created with total duration:', totalVideoDuration);
