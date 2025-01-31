@@ -381,30 +381,39 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Extract transcription details from video_details and adjust timing
     const transcription_details = video_details.map((video, index, array) => {
-      // For the last segment, extend the end time to ensure all text is shown
+      const segmentWordCount = video.transcriptionPart.split(' ').length;
+      const wordsPerSecond = 2; // 2 words per second for comfortable reading
+      const neededDuration = segmentWordCount / wordsPerSecond;
+
       if (index === array.length - 1) {
-        const lastSegmentDuration = Math.max(15, video.segmentDuration); // Ensure at least 15 seconds for last segment
-        const extendedEnd = video.segmentStart + lastSegmentDuration + 10; // Add 10s buffer for last segment
-        const segment = {
+        // For last segment, ensure enough time for text
+        const lastSegmentDuration = Math.max(30, neededDuration * 1.5); // At least 30 seconds or 1.5x needed time
+        return {
           start: video.segmentStart,
-          end: extendedEnd,
+          end: video.segmentStart + lastSegmentDuration,
           text: video.transcriptionPart,
-          words: words ? words.filter(word => word.start >= video.segmentStart) : [], // Include all remaining words
-          isLastSegment: true // Mark this as the last segment
+          words: words ? words.filter(word => word.start >= video.segmentStart) : [],
+          isLastSegment: true,
+          segmentDuration: lastSegmentDuration
         };
-        console.log('Last segment details:', segment);
-        return segment;
       }
+
       return {
         start: video.segmentStart,
         end: video.segmentEnd,
         text: video.transcriptionPart,
         words: words ? words.filter(word => word.start >= video.segmentStart && word.end <= video.segmentEnd) : [],
-        isLastSegment: false
+        isLastSegment: false,
+        segmentDuration: video.segmentDuration
       };
     });
 
+    // Update total duration based on last segment
+    const lastSegment = transcription_details[transcription_details.length - 1];
+    const totalDuration = lastSegment.end;
+
     console.log('Final transcription details:', JSON.stringify(transcription_details, null, 2));
+    console.log('Total duration:', totalDuration);
 
     console.log('Starting video generation process...');
     ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg/ffmpeg'); // Update this path if necessary
@@ -490,8 +499,10 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Loop only the last video until we reach required duration
     const lastVideo = validVideos[validVideos.length - 1];
-    while (currentDuration < requiredDuration) {
-      const remainingDuration = requiredDuration - currentDuration;
+    const lastSegmentDuration = transcription_details[transcription_details.length - 1].segmentDuration;
+    
+    while (currentDuration < lastSegmentDuration) {
+      const remainingDuration = lastSegmentDuration - currentDuration;
       const segmentDuration = Math.min(parseFloat(lastVideo.segmentDuration), remainingDuration);
       videoLoop.push({...lastVideo, segmentDuration});
       currentDuration += segmentDuration;
