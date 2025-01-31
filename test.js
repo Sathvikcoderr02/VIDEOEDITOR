@@ -410,8 +410,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Update total duration based on last segment
     const lastSegment = transcription_details[transcription_details.length - 1];
-    const totalDuration = lastSegment.end;
-
+    const totalDuration = lastSegment.end + 5; // Add 5s here
+    
     console.log('Final transcription details:', JSON.stringify(transcription_details, null, 2));
     console.log('Total duration:', totalDuration);
 
@@ -497,11 +497,10 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       totalVideoDuration += parseFloat(validVideos[i].segmentDuration);
     }
 
-    // Get last video and ensure transcript completion
+    // Get last video and ensure transcript completion with 5s buffer
     const lastVideo = validVideos[validVideos.length - 1];
-    const lastSegmentEnd = transcription_details[transcription_details.length - 1].end;
+    const lastSegmentEnd = transcription_details[transcription_details.length - 1].end + 5; // Add 5s here
     
-    // First reach transcript end
     while (totalVideoDuration < lastSegmentEnd) {
       videoLoop.push({...lastVideo});
       totalVideoDuration += parseFloat(lastVideo.segmentDuration);
@@ -568,7 +567,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     }
 
     const subtitlePath = path.join(tempDir, 'subtitles.ass');
-    await createASSSubtitleFile(transcription_details, subtitlePath, no_of_words, font_size, animation, videoWidth, videoHeight, requiredDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar);
+    await createASSSubtitleFile(transcription_details, subtitlePath, no_of_words, font_size, animation, videoWidth, videoHeight, lastSegmentEnd, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar);
 
     // Use logo_url instead of hardcoded logo URL
     const logoPath = path.join(tempDir, 'logo.png');
@@ -588,7 +587,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
       // Mix original audio with background music
       mixedAudioPath = path.join(tempDir, 'mixed_audio.mp3');
-      await mixAudioWithBackgroundMusic(audioPath, bgMusicPath, mixedAudioPath, requiredDuration);
+      await mixAudioWithBackgroundMusic(audioPath, bgMusicPath, mixedAudioPath, lastSegmentEnd);
       console.log('Audio mixed with background music:', mixedAudioPath);
     } else {
       console.log('No background music URL provided by API');
@@ -596,7 +595,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Use mixed audio if background music was provided, otherwise use original audio
     const extendedAudioPath = path.join(tempDir, 'extended_audio.mp3');
-    await extendAudio(mixedAudioPath, extendedAudioPath, requiredDuration);
+    await extendAudio(mixedAudioPath, extendedAudioPath, lastSegmentEnd);
 
     console.log('Starting FFmpeg command...');
     await new Promise(async (resolve, reject) => {
@@ -648,11 +647,11 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         if (show_progression_bar) {
           filterComplex += 'color=c=' + colorText2 + ':s=' + videoWidth + 'x80[bar];';
           filterComplex += '[bar]split[bar1][bar2];';
-          filterComplex += '[bar1]trim=duration=' + requiredDuration + '[bar1];';
-          filterComplex += '[bar2]trim=duration=' + requiredDuration + ',geq='
-            + 'r=\'if(lte(X,W*T/' + requiredDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
-            + 'g=\'if(lte(X,W*T/' + requiredDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
-            + 'b=\'if(lte(X,W*T/' + requiredDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
+          filterComplex += '[bar1]trim=duration=' + lastSegmentEnd + '[bar1];';
+          filterComplex += '[bar2]trim=duration=' + lastSegmentEnd + ',geq='
+            + 'r=\'if(lte(X,W*T/' + lastSegmentEnd + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
+            + 'g=\'if(lte(X,W*T/' + lastSegmentEnd + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
+            + 'b=\'if(lte(X,W*T/' + lastSegmentEnd + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
             + '[colorbar];';
           filterComplex += '[bar1][colorbar]overlay[progressbar];';
           filterComplex += '[outv_sub][progressbar]overlay=0:0[outv_final]';
@@ -673,7 +672,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-async', '1',
           '-vsync', '1',
           '-max_interleave_delta', '0',
-          '-t', `${requiredDuration}` // Explicitly set the total duration
+          '-t', `${lastSegmentEnd}` // Explicitly set the total duration
         ];
 
         // Modify output options based on compression setting
@@ -739,7 +738,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     });
 
     // Store API requirements after successful video generation
-    await storeAPIRequirements(language, style, apiData, outputPath, fontPath, requiredDuration);
+    await storeAPIRequirements(language, style, apiData, outputPath, fontPath, lastSegmentEnd);
 
     // Check resources before S3 upload
     await checkResourcesMiddleStep('S3 Upload');
