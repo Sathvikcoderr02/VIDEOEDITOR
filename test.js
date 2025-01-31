@@ -342,26 +342,12 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Using number of words:', no_of_words);
 
     // Calculate required duration based on text length
+    const wordsPerMinute = 150; // Average reading speed
     const wordCount = text.split(' ').length;
-    const wordsPerSecond = 1.2; // Slower speed for better readability of longer texts
-    const calculatedDuration = Math.ceil(wordCount / wordsPerSecond);
+    const requiredDuration = Math.max((wordCount / wordsPerMinute) * 60, apiDuration);
     
-    // Handle duration with proper validation
-    let actualDuration = parseFloat(apiDuration);
-    console.log('API duration:', actualDuration);
-
-    if (isNaN(actualDuration) || actualDuration <= 0) {
-      console.warn('Invalid actualDuration:', actualDuration);
-      actualDuration = Math.max(36, calculatedDuration); // Ensure minimum 36 seconds or calculated duration
-    } else {
-      // For longer texts, use the calculated duration if it's longer
-      actualDuration = Math.max(actualDuration, calculatedDuration);
-    }
-
-    // Add buffer to ensure all text is shown
-    actualDuration = actualDuration + 10; // Add 10 seconds buffer
-    let totalVideoDuration = actualDuration; // For progress bar
-    console.log('Using duration:', actualDuration, 'for word count:', wordCount);
+    console.log('Text word count:', wordCount);
+    console.log('Required duration:', requiredDuration);
 
     const video_details = apiVideos.map(asset => ({
       url: asset.assetUrl || asset.videoUrl,
@@ -504,14 +490,14 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Loop only the last video until we reach required duration
     const lastVideo = validVideos[validVideos.length - 1];
-    while (currentDuration < totalVideoDuration) {
-      const remainingDuration = totalVideoDuration - currentDuration;
+    while (currentDuration < requiredDuration) {
+      const remainingDuration = requiredDuration - currentDuration;
       const segmentDuration = Math.min(parseFloat(lastVideo.segmentDuration), remainingDuration);
       videoLoop.push({...lastVideo, segmentDuration});
       currentDuration += segmentDuration;
     }
 
-    console.log('Video loop created with total duration:', totalVideoDuration);
+    console.log('Video loop created with total duration:', currentDuration);
 
     // Handle font information
     let fontPath;
@@ -566,7 +552,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     }
 
     const subtitlePath = path.join(tempDir, 'subtitles.ass');
-    await createASSSubtitleFile(transcription_details, subtitlePath, no_of_words, font_size, animation, videoWidth, videoHeight, actualDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar);
+    await createASSSubtitleFile(transcription_details, subtitlePath, no_of_words, font_size, animation, videoWidth, videoHeight, requiredDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar);
 
     // Use logo_url instead of hardcoded logo URL
     const logoPath = path.join(tempDir, 'logo.png');
@@ -586,7 +572,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
       // Mix original audio with background music
       mixedAudioPath = path.join(tempDir, 'mixed_audio.mp3');
-      await mixAudioWithBackgroundMusic(audioPath, bgMusicPath, mixedAudioPath, totalVideoDuration);
+      await mixAudioWithBackgroundMusic(audioPath, bgMusicPath, mixedAudioPath, requiredDuration);
       console.log('Audio mixed with background music:', mixedAudioPath);
     } else {
       console.log('No background music URL provided by API');
@@ -594,7 +580,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Use mixed audio if background music was provided, otherwise use original audio
     const extendedAudioPath = path.join(tempDir, 'extended_audio.mp3');
-    await extendAudio(mixedAudioPath, extendedAudioPath, totalVideoDuration);
+    await extendAudio(mixedAudioPath, extendedAudioPath, requiredDuration);
 
     console.log('Starting FFmpeg command...');
     await new Promise(async (resolve, reject) => {
@@ -646,11 +632,11 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         if (show_progression_bar) {
           filterComplex += 'color=c=' + colorText2 + ':s=' + videoWidth + 'x80[bar];';
           filterComplex += '[bar]split[bar1][bar2];';
-          filterComplex += '[bar1]trim=duration=' + totalVideoDuration + '[bar1];';
-          filterComplex += '[bar2]trim=duration=' + totalVideoDuration + ',geq='
-            + 'r=\'if(lte(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
-            + 'g=\'if(lte(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
-            + 'b=\'if(lte(X,W*T/' + totalVideoDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
+          filterComplex += '[bar1]trim=duration=' + requiredDuration + '[bar1];';
+          filterComplex += '[bar2]trim=duration=' + requiredDuration + ',geq='
+            + 'r=\'if(lte(X,W*T/' + requiredDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
+            + 'g=\'if(lte(X,W*T/' + requiredDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
+            + 'b=\'if(lte(X,W*T/' + requiredDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
             + '[colorbar];';
           filterComplex += '[bar1][colorbar]overlay[progressbar];';
           filterComplex += '[outv_sub][progressbar]overlay=0:0[outv_final]';
@@ -671,7 +657,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-async', '1',
           '-vsync', '1',
           '-max_interleave_delta', '0',
-          '-t', `${totalVideoDuration}` // Explicitly set the total duration
+          '-t', `${requiredDuration}` // Explicitly set the total duration
         ];
 
         // Modify output options based on compression setting
@@ -737,7 +723,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     });
 
     // Store API requirements after successful video generation
-    await storeAPIRequirements(language, style, apiData, outputPath, fontPath, totalVideoDuration);
+    await storeAPIRequirements(language, style, apiData, outputPath, fontPath, requiredDuration);
 
     // Check resources before S3 upload
     await checkResourcesMiddleStep('S3 Upload');
