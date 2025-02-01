@@ -583,53 +583,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     }
 
     const subtitlePath = path.join(tempDir, 'subtitles.ass');
-    if (style === 'style_2') {
-      const textY = video_type === "portrait" ? videoHeight * 0.8 : videoHeight * 0.7;
-      const textWidth = video_type === "portrait" ? videoWidth * 0.9 : videoWidth * 0.8;
-      
-      await createASSSubtitleFile(
-        transcription_details, 
-        subtitlePath, 
-        no_of_words, 
-        font_size,
-        animation,
-        videoWidth,
-        videoHeight,
-        targetDuration,
-        colorText1,
-        colorText2,
-        colorBg,
-        textY, // Adjusted Y position
-        language,
-        style,
-        video_type,
-        fontName,
-        fontPath,
-        show_progression_bar,
-        textWidth // Added text width parameter
-      );
-    } else {
-      await createASSSubtitleFile(
-        transcription_details,
-        subtitlePath,
-        no_of_words,
-        font_size,
-        animation,
-        videoWidth,
-        videoHeight,
-        targetDuration,
-        colorText1,
-        colorText2,
-        colorBg,
-        positionY,
-        language,
-        style,
-        video_type,
-        fontName,
-        fontPath,
-        show_progression_bar
-      );
-    }
+    await createASSSubtitleFile(transcription_details, subtitlePath, no_of_words, font_size, animation, videoWidth, videoHeight, targetDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar);
 
     // Use logo_url instead of hardcoded logo URL
     const logoPath = path.join(tempDir, 'logo.png');
@@ -692,15 +646,12 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
               inputPart = `[${i}:v]trim=duration=${targetDuration},setpts=PTS-STARTPTS,`;
             }
             
-            // Apply scaling and cropping based on video_type
-            if (video_type === "square") {
-                filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
-            } else if (video_type === "portrait") {
-                filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
+            // Apply scaling and cropping consistently for all segments
+            if (video_type === "square" || video_type === "portrait") {
+              filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
             } else {
-                // landscape
-                filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
-                               `crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
+              filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
+                             `crop=${videoWidth}:${videoHeight},setsar=1,setdar=16/9,setpts=PTS-STARTPTS[v${i}];`;
             }
           });
 
@@ -871,7 +822,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
   }
 }
 
-async function createASSSubtitleFile(transcription_details, outputPath, no_of_words, font_size, animation, videoWidth, videoHeight, actualDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar, textWidth) {
+async function createASSSubtitleFile(transcription_details, outputPath, no_of_words, font_size, animation, videoWidth, videoHeight, actualDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar) {
   const assHeader = `[Script Info]
 ScriptType: v4.00+
 PlayResX: ${videoWidth} 
@@ -899,7 +850,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
   const centerX = videoWidth / 2;
   const wordSpacing = 0.1;
-  const maxWidth = textWidth || videoWidth - 20;
+  const maxWidth = videoWidth - 20;
 
   let allWords = transcription_details.flatMap(segment => 
     (segment.words && segment.words.length > 0) ? segment.words : 
