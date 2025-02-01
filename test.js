@@ -469,7 +469,18 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Check resources before downloading assets
     await checkResourcesMiddleStep('Asset Download');
-    const videos = await Promise.all(video_details.map(async (asset, index) => {
+    
+    // Filter based on video_assets type
+    const filteredAssets = video_details.filter(asset => {
+      if (!asset.url) return false;
+      const isVideo = asset.url.match(/\.(mp4|mov|avi|mkv|webm)$/i);
+      const assetType = options.videoAssets || 'all';
+      if (assetType === 'video') return isVideo;
+      if (assetType === 'image') return !isVideo;
+      return true; // 'all' or undefined
+    });
+
+    const videos = await Promise.all(filteredAssets.map(async (asset, index) => {
       if (!asset.url) {
         console.warn(`Warning: Invalid URL for asset ${index}. Skipping.`);
         return null;
