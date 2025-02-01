@@ -500,20 +500,17 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Get last video and force 38 seconds total duration
     const lastVideo = validVideos[validVideos.length - 1];
-    
-    while (totalVideoDuration < targetDuration) {
-      videoLoop.push({...lastVideo});
-      totalVideoDuration += parseFloat(lastVideo.segmentDuration);
-    }
+    lastVideo.segmentDuration = targetDuration - totalVideoDuration; // Force last video to fill remaining time
+    videoLoop.push(lastVideo);
+    totalVideoDuration = targetDuration;
 
     // Force last transcription to play full duration
     const lastTranscription = transcription_details[transcription_details.length - 1];
-    lastTranscription.start = Math.max(0, targetDuration - 10); // Start 10 seconds before end
-    lastTranscription.end = targetDuration; // End at target duration
-    lastTranscription.duration = lastTranscription.end - lastTranscription.start;
+    lastTranscription.start = 0;
+    lastTranscription.end = targetDuration;
+    lastTranscription.duration = targetDuration;
 
     console.log('Video loop created with total duration:', totalVideoDuration);
-    console.log('Updated transcription timing:', lastTranscription);
 
     // Update ALL transcription timings to ensure animations play full duration
     const lastIndex = transcription_details.length - 1;
@@ -641,17 +638,17 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
             let inputPart = '';
             
             if (video.assetType === 'image') {
-              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,setpts=N/FRAME_RATE/TB,`;
+              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,trim=duration=${targetDuration},setpts=N/FRAME_RATE/TB,`;
               const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
               inputPart += `${effect},trim=duration=${segmentDuration},setpts=N/FRAME_RATE/TB,`;
             } else {
               // For videos, ensure continuous playback
-              inputPart = `[${i}:v]setpts=N/FRAME_RATE/TB,trim=duration=${segmentDuration},setpts=N/FRAME_RATE/TB,`;
+              inputPart = `[${i}:v]trim=duration=${targetDuration},setpts=PTS-STARTPTS,`;
             }
             
             // Apply scaling and cropping consistently for all segments
             filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
-                           `crop=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
+                           `crop=${videoWidth}:${videoHeight},setsar=1,setdar=16/9,setpts=PTS-STARTPTS[v${i}];`;
           });
 
           // Concatenate all video parts
@@ -691,7 +688,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-async', '1',
           '-vsync', '1',
           '-max_interleave_delta', '0',
-          '-t', `${targetDuration}` // Explicitly set the total duration
+          '-t', `${targetDuration}`, // Explicitly set the total duration
+          '-b:v', '2500k'
         ];
 
         // Modify output options based on compression setting
