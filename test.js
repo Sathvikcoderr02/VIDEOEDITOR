@@ -491,12 +491,11 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     const videoLoop = [];
     let totalVideoDuration = 0;
 
-    // Calculate required duration based on transcript
-    const lastTranscription = transcription_details[transcription_details.length - 1];
-    const transcriptDuration = lastTranscription.end;
-    const targetDuration = transcriptDuration + 5.0; // Add 5 seconds after transcript ends
+    // Get audio duration from the API response
+    const audioDuration = parseFloat(apiData.audio_duration || apiData.duration);
+    const targetDuration = audioDuration + 5.0; // Add 5 seconds to audio duration
 
-    console.log('Transcript duration:', transcriptDuration);
+    console.log('Audio duration:', audioDuration);
     console.log('Target duration with buffer:', targetDuration);
 
     // Add all videos except the last one
@@ -513,7 +512,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       totalVideoDuration += parseFloat(lastVideo.segmentDuration);
     }
 
-    // Update transcription to include buffer time
+    // Update transcription to match audio duration plus buffer
+    const lastTranscription = transcription_details[transcription_details.length - 1];
     lastTranscription.end = targetDuration;
     lastTranscription.duration = lastTranscription.end - lastTranscription.start;
 
