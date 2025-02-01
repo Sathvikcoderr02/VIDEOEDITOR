@@ -490,7 +490,14 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     const videoLoop = [];
     let totalVideoDuration = 0;
-    const targetDuration = 38.0; // Force 38 seconds (33 + 5)
+
+    // Calculate required duration based on transcript
+    const lastTranscription = transcription_details[transcription_details.length - 1];
+    const transcriptDuration = lastTranscription.end;
+    const targetDuration = transcriptDuration + 5.0; // Add 5 seconds after transcript ends
+
+    console.log('Transcript duration:', transcriptDuration);
+    console.log('Target duration with buffer:', targetDuration);
 
     // Add all videos except the last one
     for (let i = 0; i < validVideos.length - 1; i++) {
@@ -498,17 +505,17 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       totalVideoDuration += parseFloat(validVideos[i].segmentDuration);
     }
 
-    // Get last video and force 38 seconds total duration
+    // Get last video and force full duration
     const lastVideo = validVideos[validVideos.length - 1];
-    lastVideo.segmentDuration = targetDuration - totalVideoDuration; // Force last video to fill remaining time
-    videoLoop.push(lastVideo);
-    totalVideoDuration = targetDuration;
+    
+    while (totalVideoDuration < targetDuration) {
+      videoLoop.push({...lastVideo});
+      totalVideoDuration += parseFloat(lastVideo.segmentDuration);
+    }
 
-    // Force last transcription to play full duration
-    const lastTranscription = transcription_details[transcription_details.length - 1];
-    lastTranscription.start = 0;
+    // Update transcription to include buffer time
     lastTranscription.end = targetDuration;
-    lastTranscription.duration = targetDuration;
+    lastTranscription.duration = lastTranscription.end - lastTranscription.start;
 
     console.log('Video loop created with total duration:', totalVideoDuration);
 
