@@ -1,0 +1,23 @@
+API Requirements for EN video (style_1):
+--------------------------------------------
+Text: Welcome to our video demonstration. In this comprehensive test of our video generation system, we explore every available parameter to ensure high-quality outputs. This demonstration includes various styles, animations, and color configurations that are meticulously designed for optimal viewer engagement.
+Language: en
+Animation Style: style_1
+Video Type: landscape
+Number of Words: 4
+Font Size: 100
+Animation: true
+Resolution: 1080p
+Compression: web
+Show Progress Bar: true
+Watermark: true
+Color Text 1: #00FF00
+Color Text 2: #33FF57
+Color Background: #FF00FF
+Position Y: 50
+Duration: 28.049999237060547
+Output Path: /home/manu/VIDEOEDITOR/output/style_1/final_video_en_style_1.mp4
+Font Name: PoetsenOne
+Font Path: /home/manu/VIDEOEDITOR/fonts/PoetsenOne-Regular.ttf
+Background Music URL: https://dbuzz-assets.s3.amazonaws.com/static/music/5.mp3
+--------------------------------------------

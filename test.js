@@ -13,7 +13,7 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-dotenv.config({ path: path.join('/root/VIDEOEDITOR', '.env') });
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 console.log('Environment variables loaded:', {
   accessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'Present' : 'Missing',
@@ -178,12 +178,10 @@ async function fetchDataFromAPI(text, language = 'en', options = {}, retries = 2
 }
 
 function getRandomEffect(videoWidth, videoHeight, duration) {
-  const effects = [
-    `zoompan=z='min(zoom+0.0015,1.5)':d=${Math.round(duration*30)}:s=${videoWidth}x${videoHeight}`,
-    `zoompan=z='if(lte(zoom,1.0),1.5,max(1.001,zoom-0.0015))':d=${Math.round(duration*30)}:s=${videoWidth}x${videoHeight}`,
-    `zoompan=x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':z='zoom+0.002':d=${Math.round(duration*30)}:s=${videoWidth}x${videoHeight}`
-  ];
-  return effects[Math.floor(Math.random() * effects.length)];
+  const fps = 30;
+  const totalFrames = Math.round(duration * fps);
+  
+  return `zoompan=z='min(zoom+0.0015,1.5)':d=${totalFrames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${videoWidth}x${videoHeight}`;
 }
 
 // Add this function at an appropriate place in your code
@@ -416,7 +414,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Total duration:', totalDuration);
 
     console.log('Starting video generation process...');
-    ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg/ffmpeg'); // Update this path if necessary
+    ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH || 'ffmpeg'); // Use FFMPEG_PATH from .env or default to system ffmpeg
 
     // Set video dimensions based on resolution and video_type
     let videoWidth, videoHeight;
@@ -515,13 +513,20 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       totalVideoDuration += parseFloat(validVideos[i].segmentDuration);
     }
 
-    // Get last video and force full duration
+    // Handle the last video differently
     const lastVideo = validVideos[validVideos.length - 1];
-    
-    while (totalVideoDuration < targetDuration) {
-      videoLoop.push({...lastVideo});
-      totalVideoDuration += parseFloat(lastVideo.segmentDuration);
-    }
+    const lastSegmentDuration = Math.max(
+        targetDuration - totalVideoDuration + 5, // Add 5s buffer and ensure we fill remaining time
+        parseFloat(lastVideo.segmentDuration) * 1.2 // Add 20% more duration for smooth ending
+    );
+
+    // Add the last video with adjusted duration
+    videoLoop.push({
+        ...lastVideo,
+        segmentDuration: lastSegmentDuration,
+        isLastSegment: true
+    });
+    totalVideoDuration += lastSegmentDuration;
 
     // Update transcription to match audio duration plus buffer
     const lastTranscription = transcription_details[transcription_details.length - 1];
@@ -551,7 +556,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     // Handle font information
     let fontPath;
     let fontName;
-    const fontsDir = '/root/VIDEOEDITOR/fonts/';
+    const fontsDir = path.join(__dirname, 'fonts');
     const availableFonts = {
       'PoetsenOne': 'PoetsenOne-Regular.ttf',
       'Shadow': 'Shadow.otf',
@@ -653,29 +658,18 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           // Existing code for other styles
           validVideos.forEach((video, i) => {
             const segmentDuration = video.segmentDuration || video.duration;
-            let inputPart = '';
+            const zoomEffect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
             
-            if (video.assetType === 'image') {
-              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,trim=duration=${targetDuration},setpts=N/FRAME_RATE/TB,`;
-              const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
-              inputPart += `${effect},trim=duration=${segmentDuration},setpts=N/FRAME_RATE/TB,`;
-            } else {
-              // For videos, ensure continuous playback
-              inputPart = `[${i}:v]trim=duration=${targetDuration},setpts=PTS-STARTPTS,`;
-            }
-            
-            // Apply scaling and cropping consistently for all segments
-            if (video_type === "square" || video_type === "portrait") {
-              filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
-            } else {
-              filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
-                             `crop=${videoWidth}:${videoHeight},setsar=1,setdar=16/9,setpts=PTS-STARTPTS[v${i}];`;
-            }
+            filterComplex += `[${i}:v]${zoomEffect},scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,fps=30[v${i}];`;
           });
 
-          // Concatenate all video parts
-          const videoParts = validVideos.map((_, i) => `[v${i}]`).join('');
-          filterComplex += `${videoParts}concat=n=${validVideos.length}:v=1:a=0[outv];`;
+          // Use simple concatenation instead of transitions for more stability
+          if (videoLoop.length > 1) {
+            const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
+            filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
+          } else {
+            filterComplex += `[v0]copy[outv];`;
+          }
         }
 
         // Add subtitles for all styles
@@ -777,13 +771,13 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     });
 
     // Store API requirements after successful video generation
-    await storeAPIRequirements(language, style, apiData, outputPath, fontPath, targetDuration);
+    await storeAPIRequirements(language, style, apiData, outputPath, fontPath, totalVideoDuration);
 
     // Check resources before S3 upload
     await checkResourcesMiddleStep('S3 Upload');
     try {
       // Verify file exists before attempting upload
-      const videoPath = path.join('/root/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
+      const videoPath = path.join(__dirname, 'output', style, `final_video_${language}_${style}.mp4`);
       console.log('Checking video file:', videoPath);
       
       const fileExists = await verifyFile(videoPath);
@@ -825,7 +819,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       return uploadResult.Location;
     } catch (error) {
       console.error('Error in S3 upload process:', error);
-      const videoPath = path.join('/root/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
+      const videoPath = path.join(__dirname, 'output', style, `final_video_${language}_${style}.mp4`);
       console.log('Falling back to local video path:', videoPath);
       return videoPath;
     }
