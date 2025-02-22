@@ -186,37 +186,27 @@ function getRandomEffect(videoWidth, videoHeight, duration) {
 
 // Add this function at an appropriate place in your code
 function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
-  let filterComplex = '';
-  const transitions = [
-    'fade', 'fadeblack', 'fadewhite', 'distance', 'wipeleft', 'wiperight', 'wipeup', 'wipedown',
-    'slideleft', 'slideright', 'slideup', 'slidedown', 'circlecrop', 'rectcrop', 'circleopen',
-    'circleclose', 'vertopen', 'vertclose', 'horzopen', 'horzclose', 'dissolve'
-  ];
-  const transitionDuration = 1; // 1 second transition
-  const fps = 25;
+    let filterComplex = '';
+    const fps = 30;
 
-  videoLoop.forEach((video, i) => {
-    const segmentDuration = video.segmentDuration || video.duration;
-    const zoomEffect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
-    
-    filterComplex += `[${i}:v]${zoomEffect},scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,fps=${fps}[v${i}];`;
-  });
+    // Generate zoom effects for each video
+    videoLoop.forEach((video, i) => {
+        const segmentDuration = video.segmentDuration || video.duration;
+        const totalFrames = Math.round(segmentDuration * fps);
+        
+        // Fix the zoompan syntax by removing quotes and escaping
+        filterComplex += `[${i}:v]zoompan=z=min(zoom+0.001\\,1.5):d=${totalFrames}:x=(iw-iw/zoom)/2:y=(ih-ih/zoom)/2:s=${videoWidth}x${videoHeight},format=yuv420p,fps=${fps}[v${i}];`;
+    });
 
-  // Apply transitions without reducing clip duration
-  if (videoLoop.length > 1) {
-    let lastOutput = 'v0';
-    for (let i = 1; i < videoLoop.length; i++) {
-      const randomTransition = transitions[Math.floor(Math.random() * transitions.length)];
-      const offset = videoLoop.slice(0, i).reduce((sum, v) => sum + (v.segmentDuration || v.duration), 0) - transitionDuration;
-      filterComplex += `[${lastOutput}][v${i}]xfade=transition=${randomTransition}:duration=${transitionDuration}:offset=${offset}[xf${i}];`;
-      lastOutput = `xf${i}`;
+    // Fix the concatenation syntax
+    if (videoLoop.length > 1) {
+        const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
+        filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
+    } else {
+        filterComplex += `[v0]copy[outv];`;
     }
-    filterComplex += `[${lastOutput}]copy[outv];`;
-  } else {
-    filterComplex += `[v0]copy[outv];`;
-  }
 
-  return filterComplex;
+    return filterComplex;
 }
 
 // Add this function for mid-process resource checking
@@ -667,9 +657,9 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           if (videoLoop.length > 1) {
             const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
             filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
-          } else {
+            } else {
             filterComplex += `[v0]copy[outv];`;
-          }
+            }
         }
 
         // Add subtitles for all styles
@@ -876,27 +866,66 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   let previousSlideEnd = 0;
 
   if (style === "style_2") {
-    for (let segment of transcription_details) {
-      const startTime = formatASSTime(segment.start);
-      const endTime = formatASSTime(segment.end);
-      const words = segment.text.split(' ');
-
-      for (let i = 0; i < words.length; i += no_of_words) {
-        const slideWords = words.slice(i, i + no_of_words);
-        const slideText = slideWords.join(' ');
-        const slideDuration = (segment.end - segment.start) * (slideWords.length / words.length);
-        const slideStartTime = formatASSTime(segment.start + (i / words.length) * (segment.end - segment.start));
-        const slideEndTime = formatASSTime(Math.min(segment.start + ((i + slideWords.length) / words.length) * (segment.end - segment.start), segment.end));
-
-        let lineContent = '';
-        slideWords.forEach((word, index) => {
-          const wordStart = segment.start + (i + index) * (segment.end - segment.start) / words.length;
-          const wordEnd = wordStart + (segment.end - segment.start) / words.length;
-          lineContent += `{\\k${Math.round((wordEnd - wordStart) * 100)}\\1c&HFFFFFF&\\3c&H000000&\\t(${formatASSTime(wordStart)},${formatASSTime(wordEnd)},\\1c&HFF0000&)}${word} `;
-        });
-
-        assContent += `Dialogue: 0,${slideStartTime},${slideEndTime},Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
+    for (let i = 0; i < allWords.length;) {
+      let slideWords = [];
+      let currentLineWidth = 0;
+      let lineCount = 0;
+  
+      while (slideWords.length < no_of_words && i < allWords.length) {
+        let nextWord = allWords[i];
+        let wordWidth = getTextWidth(nextWord.word, fontName, font_size);
+  
+        if (currentLineWidth + wordWidth > maxWidth) {
+          lineCount++;
+          currentLineWidth = wordWidth;
+        } else {
+          currentLineWidth += wordWidth + wordSpacing;
+        }
+  
+        slideWords.push(nextWord);
+        i++;
+  
+        if (lineCount >= 2) {
+          break;
+        }
       }
+  
+      if (slideWords.length === 0) continue;
+  
+      let slideStart = Math.max(slideWords[0].start, previousSlideEnd);
+      let slideEnd = slideWords[slideWords.length - 1].end + 1;
+  
+      if (slideEnd <= slideStart) {
+        slideEnd = slideStart + 2;
+      }
+  
+      previousSlideEnd = slideEnd;
+  
+      let totalWidth = slideWords.reduce((sum, word) => sum + getTextWidth(word.word, fontName, font_size), 0) 
+                       + (slideWords.length - 1) * wordSpacing;
+      let startX = centerX - (totalWidth / 2);
+      let currentX = startX;
+      let currentY = centerY - (lineCount * font_size / 2);
+  
+      let lineContent = '';
+      slideWords.forEach((word, wordIndex) => {
+        const wordWidth = getTextWidth(word.word, fontName, font_size);
+        const wordStart = Math.max(word.start, slideStart);
+        const wordEnd = wordIndex === slideWords.length - 1 ? slideEnd : Math.min(slideEnd, word.end + 0.5);
+        
+        lineContent += `{\\k${Math.round((wordEnd - wordStart) * 100)}` +
+          `\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&` +
+          `\\3c&H${colorText2.slice(1).match(/../g).reverse().join('')}&` +
+          `\\t(${Math.round((wordStart - slideStart) * 1000)},` +
+          `${Math.round((wordEnd - slideStart) * 1000)},` +
+          `\\1c&H${colorBg.slice(1).match(/../g).reverse().join('')}&` +
+          `\\3c&H${colorText1.slice(1).match(/../g).reverse().join('')}&)}${word.word} `;
+  
+        currentX += wordWidth + wordSpacing;
+      });
+  
+      assContent += `Dialogue: 0,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},` +
+        `Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})\\bord2\\shad1}${lineContent.trim()}\n`;
     }
   } else {
     for (let i = 0; i < allWords.length;) {
