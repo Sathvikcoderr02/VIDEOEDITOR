@@ -209,6 +209,52 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
     return filterComplex;
 }
 
+// Add this new function for style_2 image animations
+function addImageAnimationsStyle2(videoLoop, videoWidth, videoHeight) {
+    let filterComplex = '';
+    const fps = 30;
+    const directions = ['left-to-right', 'right-to-left', 'top-to-bottom', 'bottom-to-top'];
+    
+    // Generate zoom and slide effects for each video/image
+    videoLoop.forEach((video, i) => {
+        const segmentDuration = video.segmentDuration || video.duration;
+        const totalFrames = Math.round(segmentDuration * fps);
+        const zoomFactor = 1.2;
+        const zoomIncrement = (zoomFactor - 1) / totalFrames;
+        
+        // Randomly select a direction for each asset
+        const direction = directions[Math.floor(Math.random() * directions.length)];
+        let zoomPanFilter = '';
+        
+        switch (direction) {
+            case 'left-to-right':
+                zoomPanFilter = `zoompan=z='1+${zoomIncrement}*on':x='on*(iw/${zoomFactor})/${totalFrames}':y='0'`;
+                break;
+            case 'right-to-left':
+                zoomPanFilter = `zoompan=z='1+${zoomIncrement}*on':x='iw-(iw/${zoomFactor})*on/${totalFrames}':y='0'`;
+                break;
+            case 'top-to-bottom':
+                zoomPanFilter = `zoompan=z='1+${zoomIncrement}*on':x='0':y='on*(ih/${zoomFactor})/${totalFrames}'`;
+                break;
+            case 'bottom-to-top':
+                zoomPanFilter = `zoompan=z='1+${zoomIncrement}*on':x='0':y='ih-(ih/${zoomFactor})*on/${totalFrames}'`;
+                break;
+        }
+        
+        filterComplex += `[${i}:v]${zoomPanFilter}:d=${totalFrames}:s=${videoWidth}x${videoHeight},format=yuv420p,fps=${fps}[v${i}];`;
+    });
+
+    // Concatenate all processed videos/images
+    if (videoLoop.length > 1) {
+        const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
+        filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
+    } else {
+        filterComplex += `[v0]copy[outv];`;
+    }
+
+    return filterComplex;
+}
+
 // Add this function for mid-process resource checking
 async function checkResourcesMiddleStep(operation = 'Processing') {
   const minRAMPercent = 20;
@@ -641,25 +687,24 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
         let filterComplex = '';
 
-        if (style === 'style_4') {
-          // Use addImageAnimationsStyle4 for style_4
+        if (style === 'style_2') {
+          filterComplex = addImageAnimationsStyle2(validVideos, videoWidth, videoHeight);
+        } else if (style === 'style_4') {
           filterComplex = addImageAnimationsStyle4(validVideos, videoWidth, videoHeight);
         } else {
-          // Existing code for other styles
+          // Original animation code for other styles
           validVideos.forEach((video, i) => {
             const segmentDuration = video.segmentDuration || video.duration;
             const zoomEffect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
-            
             filterComplex += `[${i}:v]${zoomEffect},scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,fps=30[v${i}];`;
           });
 
-          // Use simple concatenation instead of transitions for more stability
           if (videoLoop.length > 1) {
             const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
             filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
-            } else {
+          } else {
             filterComplex += `[v0]copy[outv];`;
-            }
+          }
         }
 
         // Add subtitles for all styles
