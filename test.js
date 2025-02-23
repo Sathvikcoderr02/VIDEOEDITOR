@@ -279,7 +279,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Check if apiData is valid
     if (!apiData || typeof apiData !== 'object') {
-      throw new Error('Invalid API response');
+      throw new Error('Invalid API response ');
     }
 
     console.log('API Data:', JSON.stringify(apiData, null, 2));
@@ -891,15 +891,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       }
   
       if (slideWords.length === 0) continue;
-  
-      let slideStart = Math.max(slideWords[0].start, previousSlideEnd);
-      let slideEnd = slideWords[slideWords.length - 1].end + 1;
-  
-      if (slideEnd <= slideStart) {
-        slideEnd = slideStart + 2;
-      }
-  
-      previousSlideEnd = slideEnd;
+
+      // Use exact word timings like in style_1
+      const slideStart = slideWords[0].start;
+      const slideEnd = slideWords[slideWords.length - 1].end;
   
       let totalWidth = slideWords.reduce((sum, word) => sum + getTextWidth(word.word, fontName, font_size), 0) 
                        + (slideWords.length - 1) * wordSpacing;
@@ -910,8 +905,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       let lineContent = '';
       slideWords.forEach((word, wordIndex) => {
         const wordWidth = getTextWidth(word.word, fontName, font_size);
-        const wordStart = Math.max(word.start, slideStart);
-        const wordEnd = wordIndex === slideWords.length - 1 ? slideEnd : Math.min(slideEnd, word.end + 0.5);
+        
+        // Use exact word timing for each word
+        const wordStart = word.start;
+        const wordEnd = word.end;
         
         lineContent += `{\\k${Math.round((wordEnd - wordStart) * 100)}` +
           `\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&` +
