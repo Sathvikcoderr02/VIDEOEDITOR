@@ -409,22 +409,21 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       });
     });
 
-    // Extract transcription details from video_details and adjust timing
+    // Modify the transcription details creation to not add extra time for last segment
     const transcription_details = video_details.map((video, index, array) => {
       const segmentWordCount = video.transcriptionPart.split(' ').length;
-      const wordsPerSecond = 2; // 2 words per second for comfortable reading
+      const wordsPerSecond = 2;
       const neededDuration = segmentWordCount / wordsPerSecond;
 
       if (index === array.length - 1) {
-        // For last segment, ensure enough time for text
-        const lastSegmentDuration = Math.max(30, neededDuration * 1.5); // At least 30 seconds or 1.5x needed time
+        // For last segment, use exact duration without extra buffer
         return {
           start: video.segmentStart,
-          end: video.segmentStart + lastSegmentDuration,
+          end: video.segmentEnd, // Use exact end time
           text: video.transcriptionPart,
           words: words ? words.filter(word => word.start >= video.segmentStart) : [],
           isLastSegment: true,
-          segmentDuration: lastSegmentDuration
+          segmentDuration: video.segmentDuration
         };
       }
 
@@ -438,7 +437,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       };
     });
 
-    // Update total duration based on last segment
+    // Update total duration based on last segment without extra buffer
     const lastSegment = transcription_details[transcription_details.length - 1];
     const totalDuration = lastSegment.end;
     
@@ -532,9 +531,9 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     const videoLoop = [];
     let totalVideoDuration = 0;
 
-    // Get audio duration from the API response
+    // Get audio duration from the API response - remove the extra 5 seconds buffer
     const audioDuration = parseFloat(apiData.audio_duration || apiData.duration);
-    const targetDuration = audioDuration;
+    const targetDuration = audioDuration; // Remove the +5.0 buffer
 
     console.log('Audio duration:', audioDuration);
     console.log('Target duration:', targetDuration);
@@ -545,11 +544,11 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       totalVideoDuration += parseFloat(validVideos[i].segmentDuration);
     }
 
-    // Handle the last video differently
+    // Handle the last video without extra buffer
     const lastVideo = validVideos[validVideos.length - 1];
     const lastSegmentDuration = Math.max(
-        targetDuration - totalVideoDuration,
-        parseFloat(lastVideo.segmentDuration)
+        targetDuration - totalVideoDuration, // Remove the +5 buffer
+        parseFloat(lastVideo.segmentDuration) // Keep original duration as minimum
     );
 
     // Add the last video with adjusted duration
@@ -560,9 +559,9 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     });
     totalVideoDuration += lastSegmentDuration;
 
-    // Update transcription to match audio duration without extra buffer
+    // Update transcription to match audio duration without buffer
     const lastTranscription = transcription_details[transcription_details.length - 1];
-    lastTranscription.end = audioDuration;
+    lastTranscription.end = targetDuration;
     lastTranscription.duration = lastTranscription.end - lastTranscription.start;
 
     console.log('Video loop created with total duration:', totalVideoDuration);
@@ -735,7 +734,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-async', '1',
           '-vsync', '1',
           '-max_interleave_delta', '0',
-          '-t', `${targetDuration}`, // Use exact duration without buffer
+          '-t', `${totalDuration}`, // Explicitly set the total duration
           '-b:v', '2500k'
         ];
 
@@ -1111,7 +1110,7 @@ async function extendAudio(inputPath, outputPath, duration) {
   return new Promise((resolve, reject) => {
     ffmpeg(inputPath)
       .audioFilters(`apad=pad_dur=${duration}`)
-      .duration(duration) // Use exact duration without buffer
+      .duration(duration)
       .on('error', reject)
       .on('end', resolve)
       .save(outputPath);
@@ -1311,11 +1310,11 @@ async function mixAudioWithBackgroundMusic(voiceoverPath, bgMusicPath, outputPat
     ffmpeg()
       .input(voiceoverPath)
       .input(bgMusicPath)
-      .inputOptions(['-stream_loop -1']) // Loop background music
+      .inputOptions(['-stream_loop -1'])
       .complexFilter([
         '[0:a]volume=1[voice]',
-        '[1:a]volume=0.5[bg]', // Set background music volume to 50% of the voice
-        '[voice][bg]amix=inputs=2:duration=longest[out]'
+        '[1:a]volume=0.5[bg]',
+        '[voice][bg]amix=inputs=2:duration=first[out]' // Changed to 'first' instead of 'longest'
       ])
       .outputOptions(['-map [out]', '-t', duration])
       .output(outputPath)
