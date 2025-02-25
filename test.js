@@ -189,16 +189,28 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
     let filterComplex = '';
     const fps = 30;
 
-    // Generate zoom effects for each video
     videoLoop.forEach((video, i) => {
         const segmentDuration = video.segmentDuration || video.duration;
         const totalFrames = Math.round(segmentDuration * fps);
         
-        // Fix the zoompan syntax by removing quotes and escaping
-        filterComplex += `[${i}:v]zoompan=z=min(zoom+0.001\\,1.5):d=${totalFrames}:x=(iw-iw/zoom)/2:y=(ih-ih/zoom)/2:s=${videoWidth}x${videoHeight},format=yuv420p,fps=${fps}[v${i}];`;
+        if (video.assetType === 'video') {
+            // For videos, upscale first to prevent jitter, then apply zoom effect
+            // Upscale 10x the target dimensions
+            const upscaledWidth = videoWidth * 10;
+            const upscaledHeight = videoHeight * 10;
+            
+            filterComplex += `[${i}:v]scale=${upscaledWidth}:${upscaledHeight},` +
+                           `zoompan=z='pzoom+0.001':` +
+                           `x='iw/2-iw/zoom/2':` +  // Center horizontally
+                           `y='ih/2-ih/zoom/2':` +  // Center vertically
+                           `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},` +
+                           `setpts=PTS-STARTPTS[v${i}];`; // Ensure proper timing
+        } else {
+            // For images, use original zoompan effect
+            filterComplex += `[${i}:v]zoompan=z=min(zoom+0.001\\,1.5):d=${totalFrames}:x=(iw-iw/zoom)/2:y=(ih-ih/zoom)/2:s=${videoWidth}x${videoHeight},format=yuv420p,fps=${fps}[v${i}];`;
+        }
     });
 
-    // Fix the concatenation syntax
     if (videoLoop.length > 1) {
         const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
         filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
@@ -213,38 +225,82 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
 function addImageAnimationsStyle2(videoLoop, videoWidth, videoHeight) {
     let filterComplex = '';
     const fps = 30;
-    const directions = ['left-to-right', 'right-to-left', 'top-to-bottom', 'bottom-to-top'];
+    const directions = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'];
     
-    // Generate zoom and slide effects for each video/image
     videoLoop.forEach((video, i) => {
         const segmentDuration = video.segmentDuration || video.duration;
         const totalFrames = Math.round(segmentDuration * fps);
-        const zoomFactor = 1.2;
-        const zoomIncrement = (zoomFactor - 1) / totalFrames;
         
-        // Randomly select a direction for each asset
-        const direction = directions[Math.floor(Math.random() * directions.length)];
-        let zoomPanFilter = '';
-        
-        switch (direction) {
-            case 'left-to-right':
-                zoomPanFilter = `zoompan=z='1+${zoomIncrement}*on':x='on*(iw/${zoomFactor})/${totalFrames}':y='0'`;
-                break;
-            case 'right-to-left':
-                zoomPanFilter = `zoompan=z='1+${zoomIncrement}*on':x='iw-(iw/${zoomFactor})*on/${totalFrames}':y='0'`;
-                break;
-            case 'top-to-bottom':
-                zoomPanFilter = `zoompan=z='1+${zoomIncrement}*on':x='0':y='on*(ih/${zoomFactor})/${totalFrames}'`;
-                break;
-            case 'bottom-to-top':
-                zoomPanFilter = `zoompan=z='1+${zoomIncrement}*on':x='0':y='ih-(ih/${zoomFactor})*on/${totalFrames}'`;
-                break;
+        if (video.assetType === 'video') {
+            // Upscale dimensions to prevent jitter
+            const upscaledWidth = videoWidth * 10;
+            const upscaledHeight = videoHeight * 10;
+            
+            const direction = directions[Math.floor(Math.random() * directions.length)];
+            let zoomFilter = '';
+            
+            switch (direction) {
+                case 'center':
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
+                               `zoompan=z='pzoom+0.001':` +
+                               `x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':` +
+                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps}`;
+                    break;
+                case 'top-left':
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
+                               `zoompan=z='pzoom+0.003':` +
+                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps}`;
+                    break;
+                case 'top-right':
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
+                               `zoompan=z='pzoom+0.005':` +
+                               `x='iw/2+iw/zoom/2':y='0':` +
+                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps}`;
+                    break;
+                case 'bottom-left':
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
+                               `zoompan=z='pzoom+0.003':` +
+                               `y='${upscaledHeight}':` +
+                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps}`;
+                    break;
+                case 'bottom-right':
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
+                               `zoompan=z='pzoom+0.003':` +
+                               `x='iw/2+iw/zoom/2':y='${upscaledHeight}':` +
+                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps}`;
+                    break;
+            }
+            
+            filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS[v${i}];`;
+        } else {
+            // Original handling for images
+            const zoomFactor = 1.2;
+            const zoomIncrement = (zoomFactor - 1) / totalFrames;
+            let moveFilter = `zoompan=z='1+${zoomIncrement}*on':`;
+            
+            const direction = directions[Math.floor(Math.random() * directions.length)];
+            switch (direction) {
+                case 'center':
+                    moveFilter += `x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2'`;
+                    break;
+                case 'top-left':
+                    moveFilter += `x='0':y='0'`;
+                    break;
+                case 'top-right':
+                    moveFilter += `x='iw-iw/zoom':y='0'`;
+                    break;
+                case 'bottom-left':
+                    moveFilter += `x='0':y='ih-ih/zoom'`;
+                    break;
+                case 'bottom-right':
+                    moveFilter += `x='iw-iw/zoom':y='ih-ih/zoom'`;
+                    break;
+            }
+            
+            filterComplex += `[${i}:v]${moveFilter}:d=${totalFrames}:s=${videoWidth}x${videoHeight},format=yuv420p,fps=${fps}[v${i}];`;
         }
-        
-        filterComplex += `[${i}:v]${zoomPanFilter}:d=${totalFrames}:s=${videoWidth}x${videoHeight},format=yuv420p,fps=${fps}[v${i}];`;
     });
 
-    // Concatenate all processed videos/images
     if (videoLoop.length > 1) {
         const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
         filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
