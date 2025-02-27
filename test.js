@@ -251,10 +251,10 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
             
             filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS[v${i}];`;
         } else {
-            // Original handling for images with random direction
+            // Original handling for images with upscale
             const zoomFactor = 1.2;
             const zoomIncrement = (zoomFactor - 1) / totalFrames;
-            let moveFilter = `zoompan=z='1+${zoomIncrement}*on':`;
+            let moveFilter = `scale=8000x4000,zoompan=z='1+${zoomIncrement}*on':`;
             
             const direction = directions[Math.floor(Math.random() * directions.length)];
             switch (direction) {
@@ -353,10 +353,10 @@ function addImageAnimationsStyle2(videoLoop, videoWidth, videoHeight) {
             
             filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS[v${i}];`;
         } else {
-            // Original handling for images
+            // Original handling for images with upscale
             const zoomFactor = 1.2;
             const zoomIncrement = (zoomFactor - 1) / totalFrames;
-            let moveFilter = `zoompan=z='1+${zoomIncrement}*on':`;
+            let moveFilter = `scale=8000x4000,zoompan=z='1+${zoomIncrement}*on':`;
             
             const direction = directions[Math.floor(Math.random() * directions.length)];
             switch (direction) {
@@ -823,16 +823,17 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         } else if (style === 'style_4') {
           filterComplex = addImageAnimationsStyle4(validVideos, videoWidth, videoHeight);
         } else {
-          // Original animation code for other styles
+          // Original animation code with upscale for images
           validVideos.forEach((video, i) => {
-            const segmentDuration = video.segmentDuration || video.duration;
-            const zoomEffect = getRandomEffect(videoWidth, videoHeight, segmentDuration, video.assetType === 'video');
-            
-            if (video.assetType === 'video') {
-                filterComplex += `[${i}:v]${zoomEffect},setsar=1,setpts=PTS-STARTPTS[v${i}];`;
-            } else {
-                filterComplex += `[${i}:v]${zoomEffect},scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,fps=30[v${i}];`;
-            }
+              const segmentDuration = video.segmentDuration || video.duration;
+              const zoomEffect = getRandomEffect(videoWidth, videoHeight, segmentDuration, video.assetType === 'video');
+              
+              if (video.assetType === 'video') {
+                  filterComplex += `[${i}:v]${zoomEffect},setsar=1,setpts=PTS-STARTPTS[v${i}];`;
+              } else {
+                  // Add scale before zoompan for images
+                  filterComplex += `[${i}:v]scale=8000x4000,${zoomEffect},scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,fps=30[v${i}];`;
+              }
           });
 
           if (videoLoop.length > 1) {
