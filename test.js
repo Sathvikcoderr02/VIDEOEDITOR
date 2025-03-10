@@ -203,14 +203,13 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
         'slideleft', 'slideright', 'slideup', 'slidedown', 'circlecrop', 'rectcrop', 'circleopen',
         'circleclose', 'vertopen', 'vertclose', 'horzopen', 'horzclose', 'dissolve'
     ];
-    const transitionDuration = 1; // 1 second transition
+    const transitionDuration = 0.8;
 
     videoLoop.forEach((video, i) => {
         const segmentDuration = video.segmentDuration || video.duration;
         const totalFrames = Math.round(segmentDuration * fps);
         
         if (video.assetType === 'video') {
-            // Upscale dimensions to prevent jitter
             const upscaledWidth = videoWidth * 10;
             const upscaledHeight = videoHeight * 10;
             
@@ -249,9 +248,12 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
                     break;
             }
             
-            filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS[v${i}];`;
+            if (i === videoLoop.length - 1) {
+                filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS+0.5/TB,tpad=stop_mode=clone:stop_duration=2[v${i}];`;
+            } else {
+                filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS[v${i}];`;
+            }
         } else {
-            // Original handling for images with upscale
             const zoomFactor = 1.2;
             const zoomIncrement = (zoomFactor - 1) / totalFrames;
             let moveFilter = `scale=8000x4000,zoompan=z='1+${zoomIncrement}*on':`;
@@ -275,27 +277,42 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
                     break;
             }
             
-            filterComplex += `[${i}:v]${moveFilter}:d=${totalFrames}:s=${videoWidth}x${videoHeight},setsar=1,fps=${fps}[v${i}];`;
+            if (i === videoLoop.length - 1) {
+                const extendedDuration = totalFrames + fps * 2;
+                filterComplex += `[${i}:v]${moveFilter}:d=${extendedDuration}:s=${videoWidth}x${videoHeight},setsar=1,fps=${fps}[v${i}];`;
+            } else {
+                filterComplex += `[${i}:v]${moveFilter}:d=${totalFrames}:s=${videoWidth}x${videoHeight},setsar=1,fps=${fps}[v${i}];`;
+            }
         }
     });
 
-    // Apply transitions between segments
     if (videoLoop.length > 1) {
         let lastOutput = 'v0';
         let cumulativeDuration = 0;
         
         for (let i = 1; i < videoLoop.length; i++) {
-            const randomTransition = transitions[Math.floor(Math.random() * transitions.length)];
+            const randomTransition = (i === videoLoop.length - 1) ? 'fade' : 
+                transitions[Math.floor(Math.random() * transitions.length)];
+            
             const offset = cumulativeDuration + (videoLoop[i-1].segmentDuration || videoLoop[i-1].duration) - transitionDuration;
             
-            filterComplex += `[${lastOutput}][v${i}]xfade=transition=${randomTransition}:duration=${transitionDuration}:offset=${offset}[xf${i}];`;
+            if (i === videoLoop.length - 1) {
+                filterComplex += `[${lastOutput}][v${i}]xfade=transition=${randomTransition}:duration=${transitionDuration}:offset=${offset}[xf${i}];`;
+            } else {
+                filterComplex += `[${lastOutput}][v${i}]xfade=transition=${randomTransition}:duration=${transitionDuration}:offset=${offset}[xf${i}];`;
+            }
+            
             lastOutput = `xf${i}`;
             cumulativeDuration += videoLoop[i-1].segmentDuration || videoLoop[i-1].duration;
         }
         
-        filterComplex += `[${lastOutput}]trim=duration=${cumulativeDuration + (videoLoop[videoLoop.length-1].segmentDuration || videoLoop[videoLoop.length-1].duration)},format=yuv420p[outv];`;
+        const lastSegmentDuration = videoLoop[videoLoop.length-1].segmentDuration || videoLoop[videoLoop.length-1].duration;
+        const totalDuration = cumulativeDuration + lastSegmentDuration + 3.0;
+        
+        filterComplex += `[${lastOutput}]trim=duration=${totalDuration},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=2,format=yuv420p[outv];`;
     } else {
-        filterComplex += `[v0]trim=duration=${videoLoop[0].segmentDuration || videoLoop[0].duration},format=yuv420p[outv];`;
+        const segmentDuration = videoLoop[0].segmentDuration || videoLoop[0].duration;
+        filterComplex += `[v0]trim=duration=${segmentDuration + 3.0},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=2,format=yuv420p[outv];`;
     }
 
     return filterComplex;
@@ -312,7 +329,6 @@ function addImageAnimationsStyle2(videoLoop, videoWidth, videoHeight) {
         const totalFrames = Math.round(segmentDuration * fps);
         
         if (video.assetType === 'video') {
-            // Upscale dimensions to prevent jitter
             const upscaledWidth = videoWidth * 10;
             const upscaledHeight = videoHeight * 10;
             
@@ -353,7 +369,6 @@ function addImageAnimationsStyle2(videoLoop, videoWidth, videoHeight) {
             
             filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS[v${i}];`;
         } else {
-            // Original handling for images with upscale
             const zoomFactor = 1.2;
             const zoomIncrement = (zoomFactor - 1) / totalFrames;
             let moveFilter = `scale=8000x4000,zoompan=z='1+${zoomIncrement}*on':`;
@@ -876,7 +891,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-async', '1',
           '-vsync', '1',
           '-max_interleave_delta', '0',
-          '-t', `${totalDuration}`, // Explicitly set the total duration
+          '-t', `${totalDuration + (style === 'style_4' ? 3.0 : 0)}`, // Increase to 3 seconds buffer for style_4
           '-b:v', '2500k'
         ];
 
