@@ -13,7 +13,7 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config({ path: path.join('/root/VIDEOEDITOR', '.env') });
 
 console.log('Environment variables loaded:', {
   accessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'Present' : 'Missing',
@@ -628,7 +628,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Total duration:', totalDuration);
 
     console.log('Starting video generation process...');
-    ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH || 'ffmpeg'); // Use FFMPEG_PATH from .env or default to system ffmpeg
+    ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg/ffmpeg'); // Use absolute path for ffmpeg
 
     // Set video dimensions based on resolution and video_type
     let videoWidth, videoHeight;
@@ -660,12 +660,12 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     console.log(`Video dimensions set to: ${videoWidth}x${videoHeight} (${video_type})`);
 
-    const tempDir = path.join(__dirname, 'temp');
+    const tempDir = path.join('/root/VIDEOEDITOR', 'temp');
     await fsp.mkdir(tempDir, { recursive: true });
     console.log('Temporary directory created:', tempDir);
 
     // Create style-specific subfolder
-    const styleFolder = path.join(__dirname, 'output', style);
+    const styleFolder = path.join('/root/VIDEOEDITOR', 'output', style);
     await fsp.mkdir(styleFolder, { recursive: true });
     console.log(`Style folder created: ${styleFolder}`);
 
@@ -673,7 +673,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     let outputPath;
 
     // Assign value to outputPath
-    outputPath = path.join(styleFolder, `final_video_${language}_${style}.mp4`);
+    outputPath = path.join('/root/VIDEOEDITOR', 'output', style, `final_video_${language}_${style}.mp4`);
 
     const outputDir = path.dirname(outputPath);
     await fsp.mkdir(outputDir, { recursive: true });
@@ -770,7 +770,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     // Handle font information
     let fontPath;
     let fontName;
-    const fontsDir = path.join(__dirname, 'fonts');
+    const fontsDir = '/root/VIDEOEDITOR/fonts/';
     const availableFonts = {
       'PoetsenOne': 'PoetsenOne-Regular.ttf',
       'Shadow': 'Shadow.otf',
@@ -996,7 +996,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     await checkResourcesMiddleStep('S3 Upload');
     try {
       // Verify file exists before attempting upload
-      const videoPath = path.join(__dirname, 'output', style, `final_video_${language}_${style}.mp4`);
+      const videoPath = path.join('/root/VIDEOEDITOR', 'output', style, `final_video_${language}_${style}.mp4`);
       console.log('Checking video file:', videoPath);
       
       const fileExists = await verifyFile(videoPath);
@@ -1038,7 +1038,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       return uploadResult.Location;
     } catch (error) {
       console.error('Error in S3 upload process:', error);
-      const videoPath = path.join(__dirname, 'output', style, `final_video_${language}_${style}.mp4`);
+      const videoPath = path.join('/root/VIDEOEDITOR', 'output', style, `final_video_${language}_${style}.mp4`);
       console.log('Falling back to local video path:', videoPath);
       return videoPath;
     }
@@ -1397,7 +1397,7 @@ async function extendAudio(inputPath, outputPath, duration) {
 
 // Add this function to your test.js file
 async function storeAPIRequirements(language, style, apiData, outputPath, fontPath, totalVideoDuration) {
-  const styleFolder = path.join(__dirname, 'output', style);
+  const styleFolder = path.join('/root/VIDEOEDITOR', 'output', style);
   await fsp.mkdir(styleFolder, { recursive: true });
   const requirementsPath = path.join(styleFolder, `requirements_${language}_${style}.txt`);
   
