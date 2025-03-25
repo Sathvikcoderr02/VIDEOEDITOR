@@ -1,6 +1,6 @@
 API Requirements for EN video (style_1):
 --------------------------------------------
-Text: Welcome to our video demonstration. In this comprehensive test of our video generation system, we explore every available parameter to ensure high-quality outputs. This demonstration includes various styles, animations, and color configurations that are meticulously designed for optimal viewer engagement.
+Text: Evelyn's journey began on a rainy afternoon when she discovered an old diary in her attic. Its pages, filled with tales of distant lands and forgotten lore, ignited a fire within her. Determined to find the truth behind those stories, she set out on an odyssey that challenged her perceptions and revealed the hidden symphony of life. Every step was a verse in the epic of her unfolding destiny.
 Language: en
 Animation Style: style_1
 Video Type: landscape
@@ -11,13 +11,13 @@ Resolution: 1080p
 Compression: web
 Show Progress Bar: true
 Watermark: true
-Color Text 1: #00FF00
-Color Text 2: #33FF57
-Color Background: #FF00FF
-Position Y: 50
-Duration: 28.049999237060547
+Color Text 1: #FFFFFF
+Color Text 2: #FDE047
+Color Background: #2F4F4F
+Position Y: 55
+Duration: 21.389999389648438
 Output Path: /home/manu/VIDEOEDITOR/output/style_1/final_video_en_style_1.mp4
 Font Name: PoetsenOne
 Font Path: /home/manu/VIDEOEDITOR/fonts/PoetsenOne-Regular.ttf
-Background Music URL: https://dbuzz-assets.s3.amazonaws.com/static/music/5.mp3
+Background Music URL: https://dbuzz-assets.s3.amazonaws.com/static/music/3.mp3
 --------------------------------------------

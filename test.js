@@ -1051,14 +1051,70 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   const wordSpacing = 0.1;
   const maxWidth = videoWidth - 20;
 
-  let allWords = transcription_details.flatMap(segment => 
-    (segment.words && segment.words.length > 0) ? segment.words : 
-    segment.text.split(' ').map((word, index, array) => ({
-      word,
-      start: segment.start + (index / array.length) * (segment.end - segment.start),
-      end: segment.start + ((index + 1) / array.length) * (segment.end - segment.start)
-    }))
-  );
+  let allWords = transcription_details.flatMap((segment, segmentIndex) => {
+    // First check if we have valid segment timing
+    if (!segment || typeof segment.start !== 'number' || typeof segment.end !== 'number') {
+      console.warn(`Invalid segment timing at index ${segmentIndex}, skipping`);
+      return [];
+    }
+
+    // Ensure segment timing is valid
+    const segmentStart = Math.max(0, segment.start);
+    const segmentEnd = Math.max(segmentStart + 0.1, segment.end);
+
+    if (segment.words && Array.isArray(segment.words) && segment.words.length > 0) {
+      // Process existing word timings
+      return segment.words.map(word => ({
+        word: word.word || '',
+        start: Math.max(segmentStart, word.start || segmentStart),
+        end: Math.min(segmentEnd, word.end || segmentEnd)
+      }));
+    }
+
+    // Generate evenly spaced timings for words
+    const words = (segment.text || '').split(' ').filter(w => w.length > 0);
+    if (words.length === 0) return [];
+
+    const segmentDuration = segmentEnd - segmentStart;
+    const wordDuration = segmentDuration / words.length;
+    
+    return words.map((word, index) => {
+      const wordStart = segmentStart + (index * wordDuration);
+      const wordEnd = index === words.length - 1 
+        ? segmentEnd 
+        : Math.min(segmentEnd, wordStart + wordDuration);
+      
+      return {
+        word,
+        start: wordStart,
+        end: Math.max(wordStart + 0.1, wordEnd) // Minimum 0.1s duration
+      };
+    });
+  });
+
+  // Sort words by start time and ensure no overlaps
+  allWords.sort((a, b) => a.start - b.start);
+
+  let lastEndTime = 0;
+  allWords = allWords.map((word, index) => {
+    // Ensure word has valid timing properties
+    const start = Math.max(lastEndTime, word.start || lastEndTime);
+    const end = Math.max(start + 0.1, word.end || (start + 0.3));
+    
+    lastEndTime = end;
+    
+    return {
+      word: word.word || '',
+      start,
+      end
+    };
+  });
+
+  console.log('Processed word timings:', allWords.map(w => ({
+    word: w.word,
+    start: w.start.toFixed(2),
+    end: w.end.toFixed(2)
+  })));
 
   let previousSlideEnd = 0;
 
@@ -1122,12 +1178,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         `Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})\\bord2\\shad1}${lineContent.trim()}\n`;
     }
   } else {
+    let lastWordEnd = 0;
     for (let i = 0; i < allWords.length;) {
       let slideWords = [];
       let currentLineWidth = 0;
       let lineCount = 0;
 
-      while (slideWords.length < no_of_words && i < allWords.length) {
+      // Start new slide only after previous words end
+      while (slideWords.length < no_of_words && 
+             i < allWords.length && 
+             (slideWords.length === 0 || allWords[i].start >= lastWordEnd)) {
         let nextWord = allWords[i];
         let wordWidth = getTextWidth(nextWord.word, fontName, font_size);
 
@@ -1157,6 +1217,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       }
 
       previousSlideEnd = slideEnd;
+      lastWordEnd = slideEnd;
 
       let totalWidth = slideWords.reduce((sum, word) => sum + getTextWidth(word.word, fontName, font_size), 0) 
                        + (slideWords.length - 1) * wordSpacing;
@@ -1180,7 +1241,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         currentX += wordWidth + wordSpacing;
       }
 
-      // Render moving highlights
+      // Render moving highlights with exact word timings
       if (animation) {
         currentX = startX;
         currentY = centerY - (lineCount * font_size / 2);
@@ -1194,10 +1255,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             currentY += font_size;
           }
 
-          let wordStart = Math.max(word.start, slideStart);
-          let wordEnd = Math.min(word.end, slideEnd);
+          // Use exact word timing with minimum duration
+          const wordStart = Math.max(word.start, j > 0 ? slideWords[j-1].end : slideStart);
+          const minDuration = 0.1;
+          const wordEnd = Math.max(word.end, wordStart + minDuration);
 
-          assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
+          assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,` +
+            `{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&` +
+            `\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
 
           currentX += wordWidth + wordSpacing;
         }
