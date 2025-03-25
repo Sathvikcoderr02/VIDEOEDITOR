@@ -204,9 +204,19 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
         'circleclose', 'vertopen', 'vertclose', 'horzopen', 'horzclose', 'dissolve'
     ];
     const transitionDuration = 0.8;
+    const minimumSegmentDuration = 1.2; // Minimum duration to safely complete a transition
 
-    videoLoop.forEach((video, i) => {
+    // Preprocess video segments to ensure minimum duration
+    const processedVideoLoop = videoLoop.map(video => {
         const segmentDuration = video.segmentDuration || video.duration;
+        return {
+            ...video,
+            segmentDuration: Math.max(segmentDuration, minimumSegmentDuration)
+        };
+    });
+
+    processedVideoLoop.forEach((video, i) => {
+        const segmentDuration = video.segmentDuration;
         const totalFrames = Math.round(segmentDuration * fps);
         
         if (video.assetType === 'video') {
@@ -248,7 +258,7 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
                     break;
             }
             
-            if (i === videoLoop.length - 1) {
+            if (i === processedVideoLoop.length - 1) {
                 filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS+0.5/TB,tpad=stop_mode=clone:stop_duration=2[v${i}];`;
             } else {
                 filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS[v${i}];`;
@@ -277,7 +287,7 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
                     break;
             }
             
-            if (i === videoLoop.length - 1) {
+            if (i === processedVideoLoop.length - 1) {
                 const extendedDuration = totalFrames + fps * 2;
                 filterComplex += `[${i}:v]${moveFilter}:d=${extendedDuration}:s=${videoWidth}x${videoHeight},setsar=1,fps=${fps}[v${i}];`;
             } else {
@@ -286,32 +296,52 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
         }
     });
 
-    if (videoLoop.length > 1) {
+    if (processedVideoLoop.length > 1) {
         let lastOutput = 'v0';
         let cumulativeDuration = 0;
         
-        for (let i = 1; i < videoLoop.length; i++) {
-            const randomTransition = (i === videoLoop.length - 1) ? 'fade' : 
-                transitions[Math.floor(Math.random() * transitions.length)];
+        for (let i = 1; i < processedVideoLoop.length; i++) {
+            // Use simpler transitions for very short segments
+            const prevSegmentDuration = processedVideoLoop[i-1].segmentDuration;
+            const currentSegmentDuration = processedVideoLoop[i].segmentDuration;
             
-            const offset = cumulativeDuration + (videoLoop[i-1].segmentDuration || videoLoop[i-1].duration) - transitionDuration;
+            // Adjust transition duration based on segment duration
+            const adjustedTransitionDuration = Math.min(
+                transitionDuration,
+                prevSegmentDuration * 0.7, // Use at most 70% of previous segment for transition
+                currentSegmentDuration * 0.5  // Use at most 50% of current segment for transition
+            );
             
-            if (i === videoLoop.length - 1) {
-                filterComplex += `[${lastOutput}][v${i}]xfade=transition=${randomTransition}:duration=${transitionDuration}:offset=${offset}[xf${i}];`;
+            // Use simpler transitions for very short segments
+            let transitionOptions;
+            if (prevSegmentDuration < 1.5) {
+                // Use only simple transitions for very short segments
+                transitionOptions = ['fade', 'fadeblack', 'fadewhite'];
             } else {
-                filterComplex += `[${lastOutput}][v${i}]xfade=transition=${randomTransition}:duration=${transitionDuration}:offset=${offset}[xf${i}];`;
+                transitionOptions = transitions;
             }
             
+            const randomTransition = (i === processedVideoLoop.length - 1) ? 'fade' : 
+                transitionOptions[Math.floor(Math.random() * transitionOptions.length)];
+            
+            // Ensure offset is valid and not negative
+            const offset = Math.max(
+                0.1, // Minimum offset
+                cumulativeDuration + prevSegmentDuration - adjustedTransitionDuration
+            );
+            
+            filterComplex += `[${lastOutput}][v${i}]xfade=transition=${randomTransition}:duration=${adjustedTransitionDuration}:offset=${offset}[xf${i}];`;
+            
             lastOutput = `xf${i}`;
-            cumulativeDuration += videoLoop[i-1].segmentDuration || videoLoop[i-1].duration;
+            cumulativeDuration += prevSegmentDuration;
         }
         
-        const lastSegmentDuration = videoLoop[videoLoop.length-1].segmentDuration || videoLoop[videoLoop.length-1].duration;
+        const lastSegmentDuration = processedVideoLoop[processedVideoLoop.length-1].segmentDuration;
         const totalDuration = cumulativeDuration + lastSegmentDuration + 3.0;
         
         filterComplex += `[${lastOutput}]trim=duration=${totalDuration},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=2,format=yuv420p[outv];`;
     } else {
-        const segmentDuration = videoLoop[0].segmentDuration || videoLoop[0].duration;
+        const segmentDuration = processedVideoLoop[0].segmentDuration;
         filterComplex += `[v0]trim=duration=${segmentDuration + 3.0},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=2,format=yuv420p[outv];`;
     }
 
