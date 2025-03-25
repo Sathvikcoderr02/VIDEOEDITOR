@@ -35,6 +35,8 @@ const animation_style = "style_1"; // Statically set the animation style
 // Define progression bar variable
 //const show_progression_bar = true; // Set to true to show progression bar, false to hide it
 
+const TIMING_EPSILON = 0.005; // 5ms buffer between words for safety
+
 async function downloadFile(url, filepath) {
   return new Promise((resolve, reject) => {
     if (!url) {
@@ -1125,20 +1127,31 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   // Sort words by start time and ensure no overlaps
   allWords.sort((a, b) => a.start - b.start);
 
-  let lastEndTime = 0;
+  let previousEnd = 0;
   allWords = allWords.map((word, index) => {
-    // Ensure word has valid timing properties
-    const start = Math.max(lastEndTime, word.start || lastEndTime);
-    const end = Math.max(start + 0.1, word.end || (start + 0.3));
+    // Force sequential timing with epsilon buffer
+    const safeStart = Math.max(word.start || 0, previousEnd + TIMING_EPSILON);
     
-    lastEndTime = end;
+    // Ensure minimum duration and valid end time
+    const safeEnd = Math.max(safeStart + 0.1, word.end || (safeStart + 0.3));
+    
+    previousEnd = safeEnd;
     
     return {
       word: word.word || '',
-      start,
-      end
+      start: safeStart,
+      end: safeEnd
     };
   });
+
+  // Add second-pass validation to catch any remaining overlaps
+  for (let i = 1; i < allWords.length; i++) {
+    if (allWords[i].start <= allWords[i-1].end) {
+      console.warn(`Fixing remaining overlap at word ${i}: "${allWords[i].word}"`);
+      allWords[i].start = allWords[i-1].end + TIMING_EPSILON;
+      allWords[i].end = Math.max(allWords[i].start + 0.1, allWords[i].end);
+    }
+  }
 
   console.log('Processed word timings:', allWords.map(w => ({
     word: w.word,
@@ -1256,7 +1269,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       let currentX = startX;
       let currentY = centerY - (lineCount * font_size / 2);
 
-      // Render static words for the entire slide duration
+      // Render static words for the entire slide duration (base layer)
       for (let j = 0; j < slideWords.length; j++) {
         let word = slideWords[j];
         let wordWidth = getTextWidth(word.word, fontName, font_size);
@@ -1266,12 +1279,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           currentY += font_size;
         }
 
-        assContent += `Dialogue: 1,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&}${word.word}\n`;
+        // Add static text with higher layer number (1) to appear above backgrounds
+        assContent += `Dialogue: 1,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,` +
+          `{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&}${word.word}\n`;
 
         currentX += wordWidth + wordSpacing;
       }
 
-      // Render moving highlights with exact word timings
+      // Reset positions for the background rendering
+      currentX = startX;
+      currentY = centerY - (lineCount * font_size / 2);
+
+      // Then the existing background highlighting code follows...
       if (animation) {
         currentX = startX;
         currentY = centerY - (lineCount * font_size / 2);
@@ -1285,10 +1304,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             currentY += font_size;
           }
 
-          // Use exact word timing with minimum duration
-          const wordStart = Math.max(word.start, j > 0 ? slideWords[j-1].end : slideStart);
-          const minDuration = 0.1;
-          const wordEnd = Math.max(word.end, wordStart + minDuration);
+          // Use strict non-overlapping timing
+          const wordStart = j === 0 ? word.start : Math.max(word.start, slideWords[j-1].end + TIMING_EPSILON);
+          const wordEnd = Math.max(wordStart + 0.1, word.end);
+
+          // Verify no overlap with next word
+          if (j < slideWords.length - 1 && wordEnd >= slideWords[j+1].start) {
+            slideWords[j+1].start = wordEnd + TIMING_EPSILON;
+          }
 
           assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,` +
             `{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&` +
@@ -1317,12 +1340,15 @@ function getTextWidth(text, font, fontSize) {
 }
 
 function formatASSTime(seconds) {
-  const date = new Date(seconds * 1000);
-  const hours = date.getUTCHours().toString().padStart(2, '0');
-  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-  const secs = date.getUTCSeconds().toString().padStart(2, '0');
-  const ms = date.getUTCMilliseconds().toString().padStart(2, '0').slice(0, 2);
-  return `${hours}:${minutes}:${secs}.${ms}`;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const cs = Math.floor((seconds * 100) % 100); // Use centiseconds for better precision
+  
+  return `${hours.toString().padStart(2, '0')}:` +
+         `${minutes.toString().padStart(2, '0')}:` +
+         `${secs.toString().padStart(2, '0')}.` +
+         `${cs.toString().padStart(2, '0')}`;
 }
 
 // Add this new function to generate transcription details from text
