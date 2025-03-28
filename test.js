@@ -35,8 +35,6 @@ const animation_style = "style_1"; // Statically set the animation style
 // Define progression bar variable
 //const show_progression_bar = true; // Set to true to show progression bar, false to hide it
 
-const TIMING_EPSILON = 0.005; // 5ms buffer between words for safety
-
 async function downloadFile(url, filepath) {
   return new Promise((resolve, reject) => {
     if (!url) {
@@ -179,263 +177,48 @@ async function fetchDataFromAPI(text, language = 'en', options = {}, retries = 2
   throw new Error(`Failed to fetch data after ${retries} attempts`);
 }
 
-function getRandomEffect(videoWidth, videoHeight, duration, isVideo = false) {
-    const fps = 30;
-    const totalFrames = Math.round(duration * fps);
-    
-    if (isVideo) {
-        const upscaledWidth = videoWidth * 10;
-        const upscaledHeight = videoHeight * 10;
-        
-        return `scale=${upscaledWidth}:${upscaledHeight},` +
-               `zoompan=z='pzoom+0.001':` +
-               `x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':` +
-               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
-    } else {
-        return `zoompan=z='min(zoom+0.0015,1.5)':d=${totalFrames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${videoWidth}x${videoHeight},setsar=1`;
-    }
+function getRandomEffect(videoWidth, videoHeight, duration) {
+  const effects = [
+    `zoompan=z='min(zoom+0.0015,1.5)':d=${Math.round(duration*30)}:s=${videoWidth}x${videoHeight}`,
+    `zoompan=z='if(lte(zoom,1.0),1.5,max(1.001,zoom-0.0015))':d=${Math.round(duration*30)}:s=${videoWidth}x${videoHeight}`,
+    `zoompan=x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':z='zoom+0.002':d=${Math.round(duration*30)}:s=${videoWidth}x${videoHeight}`
+  ];
+  return effects[Math.floor(Math.random() * effects.length)];
 }
 
+// Add this function at an appropriate place in your code
 function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
-    let filterComplex = '';
-    const fps = 30;
-    const directions = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'];
-    const transitions = [
-        'fade', 'fadeblack', 'fadewhite', 'distance', 'wipeleft', 'wiperight', 'wipeup', 'wipedown',
-        'slideleft', 'slideright', 'slideup', 'slidedown', 'circlecrop', 'rectcrop', 'circleopen',
-        'circleclose', 'vertopen', 'vertclose', 'horzopen', 'horzclose', 'dissolve'
-    ];
-    const transitionDuration = 0.8;
-    const minimumSegmentDuration = 1.2; // Minimum duration to safely complete a transition
+  let filterComplex = '';
+  const transitions = [
+    'fade', 'fadeblack', 'fadewhite', 'distance', 'wipeleft', 'wiperight', 'wipeup', 'wipedown',
+    'slideleft', 'slideright', 'slideup', 'slidedown', 'circlecrop', 'rectcrop', 'circleopen',
+    'circleclose', 'vertopen', 'vertclose', 'horzopen', 'horzclose', 'dissolve'
+  ];
+  const transitionDuration = 1; // 1 second transition
+  const fps = 25;
 
-    // Preprocess video segments to ensure minimum duration
-    const processedVideoLoop = videoLoop.map(video => {
-        const segmentDuration = video.segmentDuration || video.duration;
-        return {
-            ...video,
-            segmentDuration: Math.max(segmentDuration, minimumSegmentDuration)
-        };
-    });
-
-    processedVideoLoop.forEach((video, i) => {
-        const segmentDuration = video.segmentDuration;
-        const totalFrames = Math.round(segmentDuration * fps);
-        
-        if (video.assetType === 'video') {
-            const upscaledWidth = videoWidth * 10;
-            const upscaledHeight = videoHeight * 10;
-            
-            const direction = directions[Math.floor(Math.random() * directions.length)];
-            let zoomFilter = '';
-            
-            switch (direction) {
-                case 'center':
-                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
-                               `zoompan=z='pzoom+0.001':` +
-                               `x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':` +
-                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
-                    break;
-                case 'top-left':
-                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
-                               `zoompan=z='pzoom+0.003':` +
-                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
-                    break;
-                case 'top-right':
-                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
-                               `zoompan=z='pzoom+0.005':` +
-                               `x='iw/2+iw/zoom/2':y='0':` +
-                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
-                    break;
-                case 'bottom-left':
-                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
-                               `zoompan=z='pzoom+0.003':` +
-                               `y='${upscaledHeight}':` +
-                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
-                    break;
-                case 'bottom-right':
-                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
-                               `zoompan=z='pzoom+0.003':` +
-                               `x='iw/2+iw/zoom/2':y='${upscaledHeight}':` +
-                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
-                    break;
-            }
-            
-            if (i === processedVideoLoop.length - 1) {
-                filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS+0.5/TB,tpad=stop_mode=clone:stop_duration=2[v${i}];`;
-            } else {
-                filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS[v${i}];`;
-            }
-        } else {
-            const zoomFactor = 1.2;
-            const zoomIncrement = (zoomFactor - 1) / totalFrames;
-            let moveFilter = `scale=8000x4000,zoompan=z='1+${zoomIncrement}*on':`;
-            
-            const direction = directions[Math.floor(Math.random() * directions.length)];
-            switch (direction) {
-                case 'center':
-                    moveFilter += `x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2'`;
-                    break;
-                case 'top-left':
-                    moveFilter += `x='0':y='0'`;
-                    break;
-                case 'top-right':
-                    moveFilter += `x='iw-iw/zoom':y='0'`;
-                    break;
-                case 'bottom-left':
-                    moveFilter += `x='0':y='ih-ih/zoom'`;
-                    break;
-                case 'bottom-right':
-                    moveFilter += `x='iw-iw/zoom':y='ih-ih/zoom'`;
-                    break;
-            }
-            
-            if (i === processedVideoLoop.length - 1) {
-                const extendedDuration = totalFrames + fps * 2;
-                filterComplex += `[${i}:v]${moveFilter}:d=${extendedDuration}:s=${videoWidth}x${videoHeight},setsar=1,fps=${fps}[v${i}];`;
-            } else {
-                filterComplex += `[${i}:v]${moveFilter}:d=${totalFrames}:s=${videoWidth}x${videoHeight},setsar=1,fps=${fps}[v${i}];`;
-            }
-        }
-    });
-
-    if (processedVideoLoop.length > 1) {
-        let lastOutput = 'v0';
-        let cumulativeDuration = 0;
-        
-        for (let i = 1; i < processedVideoLoop.length; i++) {
-            // Use simpler transitions for very short segments
-            const prevSegmentDuration = processedVideoLoop[i-1].segmentDuration;
-            const currentSegmentDuration = processedVideoLoop[i].segmentDuration;
-            
-            // Adjust transition duration based on segment duration
-            const adjustedTransitionDuration = Math.min(
-                transitionDuration,
-                prevSegmentDuration * 0.7, // Use at most 70% of previous segment for transition
-                currentSegmentDuration * 0.5  // Use at most 50% of current segment for transition
-            );
-            
-            // Use simpler transitions for very short segments
-            let transitionOptions;
-            if (prevSegmentDuration < 1.5) {
-                // Use only simple transitions for very short segments
-                transitionOptions = ['fade', 'fadeblack', 'fadewhite'];
-            } else {
-                transitionOptions = transitions;
-            }
-            
-            const randomTransition = (i === processedVideoLoop.length - 1) ? 'fade' : 
-                transitionOptions[Math.floor(Math.random() * transitionOptions.length)];
-            
-            // Ensure offset is valid and not negative
-            const offset = Math.max(
-                0.1, // Minimum offset
-                cumulativeDuration + prevSegmentDuration - adjustedTransitionDuration
-            );
-            
-            filterComplex += `[${lastOutput}][v${i}]xfade=transition=${randomTransition}:duration=${adjustedTransitionDuration}:offset=${offset}[xf${i}];`;
-            
-            lastOutput = `xf${i}`;
-            cumulativeDuration += prevSegmentDuration;
-        }
-        
-        const lastSegmentDuration = processedVideoLoop[processedVideoLoop.length-1].segmentDuration;
-        const totalDuration = cumulativeDuration + lastSegmentDuration + 3.0;
-        
-        filterComplex += `[${lastOutput}]trim=duration=${totalDuration},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=2,format=yuv420p[outv];`;
-    } else {
-        const segmentDuration = processedVideoLoop[0].segmentDuration;
-        filterComplex += `[v0]trim=duration=${segmentDuration + 3.0},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=2,format=yuv420p[outv];`;
-    }
-
-    return filterComplex;
-}
-
-// Add this new function for style_2 image animations
-function addImageAnimationsStyle2(videoLoop, videoWidth, videoHeight) {
-    let filterComplex = '';
-    const fps = 30;
-    const directions = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'];
+  videoLoop.forEach((video, i) => {
+    const segmentDuration = video.segmentDuration || video.duration;
+    const zoomEffect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
     
-    videoLoop.forEach((video, i) => {
-        const segmentDuration = video.segmentDuration || video.duration;
-        const totalFrames = Math.round(segmentDuration * fps);
-        
-        if (video.assetType === 'video') {
-            const upscaledWidth = videoWidth * 10;
-            const upscaledHeight = videoHeight * 10;
-            
-            const direction = directions[Math.floor(Math.random() * directions.length)];
-            let zoomFilter = '';
-            
-            switch (direction) {
-                case 'center':
-                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
-                               `zoompan=z='pzoom+0.001':` +
-                               `x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':` +
-                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
-                    break;
-                case 'top-left':
-                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
-                               `zoompan=z='pzoom+0.003':` +
-                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
-                    break;
-                case 'top-right':
-                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
-                               `zoompan=z='pzoom+0.005':` +
-                               `x='iw/2+iw/zoom/2':y='0':` +
-                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
-                    break;
-                case 'bottom-left':
-                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
-                               `zoompan=z='pzoom+0.003':` +
-                               `y='${upscaledHeight}':` +
-                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
-                    break;
-                case 'bottom-right':
-                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
-                               `zoompan=z='pzoom+0.003':` +
-                               `x='iw/2+iw/zoom/2':y='${upscaledHeight}':` +
-                               `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
-                    break;
-            }
-            
-            filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS[v${i}];`;
-        } else {
-            const zoomFactor = 1.2;
-            const zoomIncrement = (zoomFactor - 1) / totalFrames;
-            let moveFilter = `scale=8000x4000,zoompan=z='1+${zoomIncrement}*on':`;
-            
-            const direction = directions[Math.floor(Math.random() * directions.length)];
-            switch (direction) {
-                case 'center':
-                    moveFilter += `x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2'`;
-                    break;
-                case 'top-left':
-                    moveFilter += `x='0':y='0'`;
-                    break;
-                case 'top-right':
-                    moveFilter += `x='iw-iw/zoom':y='0'`;
-                    break;
-                case 'bottom-left':
-                    moveFilter += `x='0':y='ih-ih/zoom'`;
-                    break;
-                case 'bottom-right':
-                    moveFilter += `x='iw-iw/zoom':y='ih-ih/zoom'`;
-                    break;
-            }
-            
-            filterComplex += `[${i}:v]${moveFilter}:d=${totalFrames}:s=${videoWidth}x${videoHeight},setsar=1,fps=${fps}[v${i}];`;
-        }
-    });
+    filterComplex += `[${i}:v]${zoomEffect},scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,fps=${fps}[v${i}];`;
+  });
 
-    if (videoLoop.length > 1) {
-        const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
-        filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
-    } else {
-        filterComplex += `[v0]copy[outv];`;
+  // Apply transitions without reducing clip duration
+  if (videoLoop.length > 1) {
+    let lastOutput = 'v0';
+    for (let i = 1; i < videoLoop.length; i++) {
+      const randomTransition = transitions[Math.floor(Math.random() * transitions.length)];
+      const offset = videoLoop.slice(0, i).reduce((sum, v) => sum + (v.segmentDuration || v.duration), 0) - transitionDuration;
+      filterComplex += `[${lastOutput}][v${i}]xfade=transition=${randomTransition}:duration=${transitionDuration}:offset=${offset}[xf${i}];`;
+      lastOutput = `xf${i}`;
     }
+    filterComplex += `[${lastOutput}]copy[outv];`;
+  } else {
+    filterComplex += `[v0]copy[outv];`;
+  }
 
-    return filterComplex;
+  return filterComplex;
 }
 
 // Add this function for mid-process resource checking
@@ -508,7 +291,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Check if apiData is valid
     if (!apiData || typeof apiData !== 'object') {
-      throw new Error('Invalid API response ');
+      throw new Error('Invalid API response');
     }
 
     console.log('API Data:', JSON.stringify(apiData, null, 2));
@@ -581,6 +364,10 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     // Calculate base duration first
     let baseDuration = video_details.reduce((sum, video) => sum + video.segmentDuration, 0);
     
+    // Add extra buffer to ensure all text is displayed
+    const extraBuffer = 5;
+    baseDuration += extraBuffer;
+
     // Log segment details for debugging
     console.log('Text segments received from API:');
     video_details.forEach((video, index) => {
@@ -592,21 +379,22 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       });
     });
 
-    // Modify the transcription details creation to not add extra time for last segment
+    // Extract transcription details from video_details and adjust timing
     const transcription_details = video_details.map((video, index, array) => {
       const segmentWordCount = video.transcriptionPart.split(' ').length;
-      const wordsPerSecond = 2;
+      const wordsPerSecond = 2; // 2 words per second for comfortable reading
       const neededDuration = segmentWordCount / wordsPerSecond;
 
       if (index === array.length - 1) {
-        // For last segment, use exact duration without extra buffer
+        // For last segment, ensure enough time for text
+        const lastSegmentDuration = Math.max(30, neededDuration * 1.5); // At least 30 seconds or 1.5x needed time
         return {
           start: video.segmentStart,
-          end: video.segmentEnd, // Use exact end time
+          end: video.segmentStart + lastSegmentDuration,
           text: video.transcriptionPart,
           words: words ? words.filter(word => word.start >= video.segmentStart) : [],
           isLastSegment: true,
-          segmentDuration: video.segmentDuration
+          segmentDuration: lastSegmentDuration
         };
       }
 
@@ -620,15 +408,15 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       };
     });
 
-    // Update total duration based on last segment without extra buffer
+    // Update total duration based on last segment
     const lastSegment = transcription_details[transcription_details.length - 1];
-    const totalDuration = lastSegment.end;
+    const totalDuration = lastSegment.end + 5; // Add 5s here
     
     console.log('Final transcription details:', JSON.stringify(transcription_details, null, 2));
     console.log('Total duration:', totalDuration);
 
     console.log('Starting video generation process...');
-    ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg/ffmpeg'); // Use absolute path for ffmpeg
+    ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg'); // Update this path if necessary
 
     // Set video dimensions based on resolution and video_type
     let videoWidth, videoHeight;
@@ -660,20 +448,27 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     console.log(`Video dimensions set to: ${videoWidth}x${videoHeight} (${video_type})`);
 
-    const tempDir = path.join('/root/VIDEOEDITOR', 'temp');
+    /* Old temp directory path
+    const tempDir = path.join('/root/VIDEOEDITOR/temp');
+    */
+    const tempDir = path.join(__dirname, 'temp');
     await fsp.mkdir(tempDir, { recursive: true });
     console.log('Temporary directory created:', tempDir);
 
-    // Create style-specific subfolder
-    const styleFolder = path.join('/root/VIDEOEDITOR', 'output', style);
+    /* Old style folder path
+    const styleFolder = path.join('/root/VIDEOEDITOR/output', style);
+    */
+    const styleFolder = path.join(__dirname, 'output', style);
     await fsp.mkdir(styleFolder, { recursive: true });
     console.log(`Style folder created: ${styleFolder}`);
 
     // Declare outputPath at the beginning of the function
     let outputPath;
 
-    // Assign value to outputPath
-    outputPath = path.join('/root/VIDEOEDITOR', 'output', style, `final_video_${language}_${style}.mp4`);
+    /* Old output path
+    outputPath = path.join('/root/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
+    */
+    outputPath = path.join(styleFolder, `final_video_${language}_${style}.mp4`);
 
     const outputDir = path.dirname(outputPath);
     await fsp.mkdir(outputDir, { recursive: true });
@@ -714,12 +509,12 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     const videoLoop = [];
     let totalVideoDuration = 0;
 
-    // Get audio duration from the API response - remove the extra 5 seconds buffer
+    // Get audio duration from the API response
     const audioDuration = parseFloat(apiData.audio_duration || apiData.duration);
-    const targetDuration = audioDuration; // Remove the +5.0 buffer
+    const targetDuration = audioDuration + 5.0; // Add 5 seconds to audio duration
 
     console.log('Audio duration:', audioDuration);
-    console.log('Target duration:', targetDuration);
+    console.log('Target duration with buffer:', targetDuration);
 
     // Add all videos except the last one
     for (let i = 0; i < validVideos.length - 1; i++) {
@@ -727,22 +522,15 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       totalVideoDuration += parseFloat(validVideos[i].segmentDuration);
     }
 
-    // Handle the last video without extra buffer
+    // Get last video and force full duration
     const lastVideo = validVideos[validVideos.length - 1];
-    const lastSegmentDuration = Math.max(
-        targetDuration - totalVideoDuration, // Remove the +5 buffer
-        parseFloat(lastVideo.segmentDuration) // Keep original duration as minimum
-    );
+    
+    while (totalVideoDuration < targetDuration) {
+      videoLoop.push({...lastVideo});
+      totalVideoDuration += parseFloat(lastVideo.segmentDuration);
+    }
 
-    // Add the last video with adjusted duration
-    videoLoop.push({
-        ...lastVideo,
-        segmentDuration: lastSegmentDuration,
-        isLastSegment: true
-    });
-    totalVideoDuration += lastSegmentDuration;
-
-    // Update transcription to match audio duration without buffer
+    // Update transcription to match audio duration plus buffer
     const lastTranscription = transcription_details[transcription_details.length - 1];
     lastTranscription.end = targetDuration;
     lastTranscription.duration = lastTranscription.end - lastTranscription.start;
@@ -770,7 +558,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     // Handle font information
     let fontPath;
     let fontName;
-    const fontsDir = '/root/VIDEOEDITOR/fonts/';
+    const fontsDir = '/Users/sathvik02/Documents/c/fonts/';
     const availableFonts = {
       'PoetsenOne': 'PoetsenOne-Regular.ttf',
       'Shadow': 'Shadow.otf',
@@ -820,7 +608,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     }
 
     const subtitlePath = path.join(tempDir, 'subtitles.ass');
-    await createASSSubtitleFile(transcription_details, subtitlePath, no_of_words, font_size, animation, videoWidth, videoHeight, totalDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar);
+    await createASSSubtitleFile(transcription_details, subtitlePath, no_of_words, font_size, animation, videoWidth, videoHeight, targetDuration, colorText1, colorText2, colorBg, positionY, language, style, video_type, fontName, fontPath, show_progression_bar);
 
     // Use logo_url instead of hardcoded logo URL
     const logoPath = path.join(tempDir, 'logo.png');
@@ -840,7 +628,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
       // Mix original audio with background music
       mixedAudioPath = path.join(tempDir, 'mixed_audio.mp3');
-      await mixAudioWithBackgroundMusic(audioPath, bgMusicPath, mixedAudioPath, totalDuration);
+      await mixAudioWithBackgroundMusic(audioPath, bgMusicPath, mixedAudioPath, targetDuration);
       console.log('Audio mixed with background music:', mixedAudioPath);
     } else {
       console.log('No background music URL provided by API');
@@ -848,7 +636,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     // Use mixed audio if background music was provided, otherwise use original audio
     const extendedAudioPath = path.join(tempDir, 'extended_audio.mp3');
-    await extendAudio(mixedAudioPath, extendedAudioPath, totalDuration);
+    await extendAudio(mixedAudioPath, extendedAudioPath, targetDuration);
 
     console.log('Starting FFmpeg command...');
     await new Promise(async (resolve, reject) => {
@@ -865,30 +653,36 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
         let filterComplex = '';
 
-        if (style === 'style_2') {
-          filterComplex = addImageAnimationsStyle2(validVideos, videoWidth, videoHeight);
-        } else if (style === 'style_4') {
+        if (style === 'style_4') {
+          // Use addImageAnimationsStyle4 for style_4
           filterComplex = addImageAnimationsStyle4(validVideos, videoWidth, videoHeight);
         } else {
-          // Original animation code with upscale for images
+          // Existing code for other styles
           validVideos.forEach((video, i) => {
-              const segmentDuration = video.segmentDuration || video.duration;
-              const zoomEffect = getRandomEffect(videoWidth, videoHeight, segmentDuration, video.assetType === 'video');
-              
-              if (video.assetType === 'video') {
-                  filterComplex += `[${i}:v]${zoomEffect},setsar=1,setpts=PTS-STARTPTS[v${i}];`;
-              } else {
-                  // Add scale before zoompan for images
-                  filterComplex += `[${i}:v]scale=8000x4000,${zoomEffect},scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,fps=30[v${i}];`;
-              }
+            const segmentDuration = video.segmentDuration || video.duration;
+            let inputPart = '';
+            
+            if (video.assetType === 'image') {
+              inputPart = `[${i}:v]loop=loop=-1:size=1:start=0,trim=duration=${targetDuration},setpts=N/FRAME_RATE/TB,`;
+              const effect = getRandomEffect(videoWidth, videoHeight, segmentDuration);
+              inputPart += `${effect},trim=duration=${segmentDuration},setpts=N/FRAME_RATE/TB,`;
+            } else {
+              // For videos, ensure continuous playback
+              inputPart = `[${i}:v]trim=duration=${targetDuration},setpts=PTS-STARTPTS,`;
+            }
+            
+            // Apply scaling and cropping consistently for all segments
+            if (video_type === "square" || video_type === "portrait") {
+              filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight},setsar=1[v${i}];`;
+            } else {
+              filterComplex += `${inputPart}scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,` +
+                             `crop=${videoWidth}:${videoHeight},setsar=1,setdar=16/9,setpts=PTS-STARTPTS[v${i}];`;
+            }
           });
 
-          if (videoLoop.length > 1) {
-            const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
-            filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
-          } else {
-            filterComplex += `[v0]copy[outv];`;
-          }
+          // Concatenate all video parts
+          const videoParts = validVideos.map((_, i) => `[v${i}]`).join('');
+          filterComplex += `${videoParts}concat=n=${validVideos.length}:v=1:a=0[outv];`;
         }
 
         // Add subtitles for all styles
@@ -896,13 +690,13 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
         // Add progression bar filter only if show_progression_bar is true
         if (show_progression_bar) {
-          filterComplex += 'color=c=' + colorText2 + ':s=' + videoWidth + 'x56[bar];';
+          filterComplex += 'color=c=' + colorText2 + ':s=' + videoWidth + 'x80[bar];';
           filterComplex += '[bar]split[bar1][bar2];';
-          filterComplex += '[bar1]trim=duration=' + totalDuration + '[bar1];';
-          filterComplex += '[bar2]trim=duration=' + totalDuration + ',geq='
-            + 'r=\'if(lte(X,W*T/' + totalDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
-            + 'g=\'if(lte(X,W*T/' + totalDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
-            + 'b=\'if(lte(X,W*T/' + totalDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
+          filterComplex += '[bar1]trim=duration=' + targetDuration + '[bar1];';
+          filterComplex += '[bar2]trim=duration=' + targetDuration + ',geq='
+            + 'r=\'if(lte(X,W*T/' + targetDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
+            + 'g=\'if(lte(X,W*T/' + targetDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
+            + 'b=\'if(lte(X,W*T/' + targetDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
             + '[colorbar];';
           filterComplex += '[bar1][colorbar]overlay[progressbar];';
           filterComplex += '[outv_sub][progressbar]overlay=0:0[outv_final]';
@@ -923,7 +717,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-async', '1',
           '-vsync', '1',
           '-max_interleave_delta', '0',
-          '-t', `${totalDuration + (style === 'style_4' ? 3.0 : 0)}`, // Increase to 3 seconds buffer for style_4
+          '-t', `${targetDuration}`, // Explicitly set the total duration
           '-b:v', '2500k'
         ];
 
@@ -990,13 +784,16 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     });
 
     // Store API requirements after successful video generation
-    await storeAPIRequirements(language, style, apiData, outputPath, fontPath, totalVideoDuration);
+    await storeAPIRequirements(language, style, apiData, outputPath, fontPath, targetDuration);
 
     // Check resources before S3 upload
     await checkResourcesMiddleStep('S3 Upload');
     try {
       // Verify file exists before attempting upload
-      const videoPath = path.join('/root/VIDEOEDITOR', 'output', style, `final_video_${language}_${style}.mp4`);
+      /* Old video path
+      const videoPath = path.join('/root/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
+      */
+      const videoPath = path.join(__dirname, 'output', style, `final_video_${language}_${style}.mp4`);
       console.log('Checking video file:', videoPath);
       
       const fileExists = await verifyFile(videoPath);
@@ -1038,7 +835,10 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       return uploadResult.Location;
     } catch (error) {
       console.error('Error in S3 upload process:', error);
-      const videoPath = path.join('/root/VIDEOEDITOR', 'output', style, `final_video_${language}_${style}.mp4`);
+      /* Old video path
+      const videoPath = path.join('/root/VIDEOEDITOR/output', style, `final_video_${language}_${style}.mp4`);
+      */
+      const videoPath = path.join(__dirname, 'output', style, `final_video_${language}_${style}.mp4`);
       console.log('Falling back to local video path:', videoPath);
       return videoPath;
     }
@@ -1083,154 +883,47 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   const wordSpacing = 0.1;
   const maxWidth = videoWidth - 20;
 
-  let allWords = transcription_details.flatMap((segment, segmentIndex) => {
-    // First check if we have valid segment timing
-    if (!segment || typeof segment.start !== 'number' || typeof segment.end !== 'number') {
-      console.warn(`Invalid segment timing at index ${segmentIndex}, skipping`);
-      return [];
-    }
-
-    // Ensure segment timing is valid
-    const segmentStart = Math.max(0, segment.start);
-    const segmentEnd = Math.max(segmentStart + 0.1, segment.end);
-
-    if (segment.words && Array.isArray(segment.words) && segment.words.length > 0) {
-      // Process existing word timings
-      return segment.words.map(word => ({
-        word: word.word || '',
-        start: Math.max(segmentStart, word.start || segmentStart),
-        end: Math.min(segmentEnd, word.end || segmentEnd)
-      }));
-    }
-
-    // Generate evenly spaced timings for words
-    const words = (segment.text || '').split(' ').filter(w => w.length > 0);
-    if (words.length === 0) return [];
-
-    const segmentDuration = segmentEnd - segmentStart;
-    const wordDuration = segmentDuration / words.length;
-    
-    return words.map((word, index) => {
-      const wordStart = segmentStart + (index * wordDuration);
-      const wordEnd = index === words.length - 1 
-        ? segmentEnd 
-        : Math.min(segmentEnd, wordStart + wordDuration);
-      
-      return {
-        word,
-        start: wordStart,
-        end: Math.max(wordStart + 0.1, wordEnd) // Minimum 0.1s duration
-      };
-    });
-  });
-
-  // Sort words by start time and ensure no overlaps
-  allWords.sort((a, b) => a.start - b.start);
-
-  let previousEnd = 0;
-  allWords = allWords.map((word, index) => {
-    // Force sequential timing with epsilon buffer
-    const safeStart = Math.max(word.start || 0, previousEnd + TIMING_EPSILON);
-    
-    // Ensure minimum duration and valid end time
-    const safeEnd = Math.max(safeStart + 0.1, word.end || (safeStart + 0.3));
-    
-    previousEnd = safeEnd;
-    
-    return {
-      word: word.word || '',
-      start: safeStart,
-      end: safeEnd
-    };
-  });
-
-  // Add second-pass validation to catch any remaining overlaps
-  for (let i = 1; i < allWords.length; i++) {
-    if (allWords[i].start <= allWords[i-1].end) {
-      console.warn(`Fixing remaining overlap at word ${i}: "${allWords[i].word}"`);
-      allWords[i].start = allWords[i-1].end + TIMING_EPSILON;
-      allWords[i].end = Math.max(allWords[i].start + 0.1, allWords[i].end);
-    }
-  }
-
-  console.log('Processed word timings:', allWords.map(w => ({
-    word: w.word,
-    start: w.start.toFixed(2),
-    end: w.end.toFixed(2)
-  })));
+  let allWords = transcription_details.flatMap(segment => 
+    (segment.words && segment.words.length > 0) ? segment.words : 
+    segment.text.split(' ').map((word, index, array) => ({
+      word,
+      start: segment.start + (index / array.length) * (segment.end - segment.start),
+      end: segment.start + ((index + 1) / array.length) * (segment.end - segment.start)
+    }))
+  );
 
   let previousSlideEnd = 0;
 
   if (style === "style_2") {
-    for (let i = 0; i < allWords.length;) {
-      let slideWords = [];
-      let currentLineWidth = 0;
-      let lineCount = 0;
-  
-      while (slideWords.length < no_of_words && i < allWords.length) {
-        let nextWord = allWords[i];
-        let wordWidth = getTextWidth(nextWord.word, fontName, font_size);
-  
-        if (currentLineWidth + wordWidth > maxWidth) {
-          lineCount++;
-          currentLineWidth = wordWidth;
-        } else {
-          currentLineWidth += wordWidth + wordSpacing;
-        }
-  
-        slideWords.push(nextWord);
-        i++;
-  
-        if (lineCount >= 2) {
-          break;
-        }
-      }
-  
-      if (slideWords.length === 0) continue;
+    for (let segment of transcription_details) {
+      const startTime = formatASSTime(segment.start);
+      const endTime = formatASSTime(segment.end);
+      const words = segment.text.split(' ');
 
-      // Use exact word timings like in style_1
-      const slideStart = slideWords[0].start;
-      const slideEnd = slideWords[slideWords.length - 1].end;
-  
-      let totalWidth = slideWords.reduce((sum, word) => sum + getTextWidth(word.word, fontName, font_size), 0) 
-                       + (slideWords.length - 1) * wordSpacing;
-      let startX = centerX - (totalWidth / 2);
-      let currentX = startX;
-      let currentY = centerY - (lineCount * font_size / 2);
-  
-      let lineContent = '';
-      slideWords.forEach((word, wordIndex) => {
-        const wordWidth = getTextWidth(word.word, fontName, font_size);
-        
-        // Use exact word timing for each word
-        const wordStart = word.start;
-        const wordEnd = word.end;
-        
-        lineContent += `{\\k${Math.round((wordEnd - wordStart) * 100)}` +
-          `\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&` +
-          `\\3c&H${colorText2.slice(1).match(/../g).reverse().join('')}&` +
-          `\\t(${Math.round((wordStart - slideStart) * 1000)},` +
-          `${Math.round((wordEnd - slideStart) * 1000)},` +
-          `\\1c&H${colorBg.slice(1).match(/../g).reverse().join('')}&` +
-          `\\3c&H${colorText1.slice(1).match(/../g).reverse().join('')}&)}${word.word} `;
-  
-        currentX += wordWidth + wordSpacing;
-      });
-  
-      assContent += `Dialogue: 0,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},` +
-        `Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})\\bord2\\shad1}${lineContent.trim()}\n`;
+      for (let i = 0; i < words.length; i += no_of_words) {
+        const slideWords = words.slice(i, i + no_of_words);
+        const slideText = slideWords.join(' ');
+        const slideDuration = (segment.end - segment.start) * (slideWords.length / words.length);
+        const slideStartTime = formatASSTime(segment.start + (i / words.length) * (segment.end - segment.start));
+        const slideEndTime = formatASSTime(Math.min(segment.start + ((i + slideWords.length) / words.length) * (segment.end - segment.start), segment.end));
+
+        let lineContent = '';
+        slideWords.forEach((word, index) => {
+          const wordStart = segment.start + (i + index) * (segment.end - segment.start) / words.length;
+          const wordEnd = wordStart + (segment.end - segment.start) / words.length;
+          lineContent += `{\\k${Math.round((wordEnd - wordStart) * 100)}\\1c&HFFFFFF&\\3c&H000000&\\t(${formatASSTime(wordStart)},${formatASSTime(wordEnd)},\\1c&HFF0000&)}${word} `;
+        });
+
+        assContent += `Dialogue: 0,${slideStartTime},${slideEndTime},Default,,0,0,0,,{\\an5\\pos(${centerX},${adjustedCenterY})}${lineContent.trim()}\n`;
+      }
     }
   } else {
-    let lastWordEnd = 0;
     for (let i = 0; i < allWords.length;) {
       let slideWords = [];
       let currentLineWidth = 0;
       let lineCount = 0;
 
-      // Start new slide only after previous words end
-      while (slideWords.length < no_of_words && 
-             i < allWords.length && 
-             (slideWords.length === 0 || allWords[i].start >= lastWordEnd)) {
+      while (slideWords.length < no_of_words && i < allWords.length) {
         let nextWord = allWords[i];
         let wordWidth = getTextWidth(nextWord.word, fontName, font_size);
 
@@ -1260,7 +953,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       }
 
       previousSlideEnd = slideEnd;
-      lastWordEnd = slideEnd;
 
       let totalWidth = slideWords.reduce((sum, word) => sum + getTextWidth(word.word, fontName, font_size), 0) 
                        + (slideWords.length - 1) * wordSpacing;
@@ -1269,7 +961,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       let currentX = startX;
       let currentY = centerY - (lineCount * font_size / 2);
 
-      // Render static words for the entire slide duration (base layer)
+      // Render static words for the entire slide duration
       for (let j = 0; j < slideWords.length; j++) {
         let word = slideWords[j];
         let wordWidth = getTextWidth(word.word, fontName, font_size);
@@ -1279,18 +971,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           currentY += font_size;
         }
 
-        // Add static text with higher layer number (1) to appear above backgrounds
-        assContent += `Dialogue: 1,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,` +
-          `{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&}${word.word}\n`;
+        assContent += `Dialogue: 1,${formatASSTime(slideStart)},${formatASSTime(slideEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\1c&H${colorText1.slice(1).match(/../g).reverse().join('')}&}${word.word}\n`;
 
         currentX += wordWidth + wordSpacing;
       }
 
-      // Reset positions for the background rendering
-      currentX = startX;
-      currentY = centerY - (lineCount * font_size / 2);
-
-      // Then the existing background highlighting code follows...
+      // Render moving highlights
       if (animation) {
         currentX = startX;
         currentY = centerY - (lineCount * font_size / 2);
@@ -1304,18 +990,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             currentY += font_size;
           }
 
-          // Use strict non-overlapping timing
-          const wordStart = j === 0 ? word.start : Math.max(word.start, slideWords[j-1].end + TIMING_EPSILON);
-          const wordEnd = Math.max(wordStart + 0.1, word.end);
+          let wordStart = Math.max(word.start, slideStart);
+          let wordEnd = Math.min(word.end, slideEnd);
 
-          // Verify no overlap with next word
-          if (j < slideWords.length - 1 && wordEnd >= slideWords[j+1].start) {
-            slideWords[j+1].start = wordEnd + TIMING_EPSILON;
-          }
-
-          assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,` +
-            `{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&` +
-            `\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
+          assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
 
           currentX += wordWidth + wordSpacing;
         }
@@ -1340,15 +1018,12 @@ function getTextWidth(text, font, fontSize) {
 }
 
 function formatASSTime(seconds) {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  const cs = Math.floor((seconds * 100) % 100); // Use centiseconds for better precision
-  
-  return `${hours.toString().padStart(2, '0')}:` +
-         `${minutes.toString().padStart(2, '0')}:` +
-         `${secs.toString().padStart(2, '0')}.` +
-         `${cs.toString().padStart(2, '0')}`;
+  const date = new Date(seconds * 1000);
+  const hours = date.getUTCHours().toString().padStart(2, '0');
+  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+  const secs = date.getUTCSeconds().toString().padStart(2, '0');
+  const ms = date.getUTCMilliseconds().toString().padStart(2, '0').slice(0, 2);
+  return `${hours}:${minutes}:${secs}.${ms}`;
 }
 
 // Add this new function to generate transcription details from text
@@ -1397,7 +1072,7 @@ async function extendAudio(inputPath, outputPath, duration) {
 
 // Add this function to your test.js file
 async function storeAPIRequirements(language, style, apiData, outputPath, fontPath, totalVideoDuration) {
-  const styleFolder = path.join('/root/VIDEOEDITOR', 'output', style);
+  const styleFolder = path.join(__dirname, 'output', style);
   await fsp.mkdir(styleFolder, { recursive: true });
   const requirementsPath = path.join(styleFolder, `requirements_${language}_${style}.txt`);
   
@@ -1588,11 +1263,11 @@ async function mixAudioWithBackgroundMusic(voiceoverPath, bgMusicPath, outputPat
     ffmpeg()
       .input(voiceoverPath)
       .input(bgMusicPath)
-      .inputOptions(['-stream_loop -1'])
+      .inputOptions(['-stream_loop -1']) // Loop background music
       .complexFilter([
         '[0:a]volume=1[voice]',
-        '[1:a]volume=0.5[bg]',
-        '[voice][bg]amix=inputs=2:duration=first[out]' // Changed to 'first' instead of 'longest'
+        '[1:a]volume=0.5[bg]', // Set background music volume to 50% of the voice
+        '[voice][bg]amix=inputs=2:duration=longest[out]'
       ])
       .outputOptions(['-map [out]', '-t', duration])
       .output(outputPath)
