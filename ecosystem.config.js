@@ -7,7 +7,7 @@ module.exports = {
       ignore_watch: ['node_modules', 'temp', 'output'],
       instances: 1,
       autorestart: true,
-      max_memory_restart: '1G',
+      max_memory_restart: '8G',
       env: {
         NODE_ENV: 'development',
         NODE_OPTIONS: '--max-old-space-size=4096' // Increase memory to 4GB
