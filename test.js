@@ -13,10 +13,7 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Add this at the top of your file, after the requires
-const baseDir = '/root/VIDEOEDITOR';
-
-dotenv.config({ path: path.join(baseDir, '.env') });
+dotenv.config({ path: path.join('/root/VIDEOEDITOR', '.env') });
 
 console.log('Environment variables loaded:', {
   accessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'Present' : 'Missing',
@@ -187,15 +184,15 @@ function getRandomEffect(videoWidth, videoHeight, duration, isVideo = false) {
     const totalFrames = Math.round(duration * fps);
     
     if (isVideo) {
-        // Updated video processing to maintain aspect ratio
-        return `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-               `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
+        const upscaledWidth = videoWidth * 10;
+        const upscaledHeight = videoHeight * 10;
+        
+        return `scale=${upscaledWidth}:${upscaledHeight},` +
                `zoompan=z='pzoom+0.001':` +
                `x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':` +
                `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
     } else {
-        // Keep the existing image processing code
-        return `zoompan=z='min(zoom+0.0015,1.5)':d=${totalFrames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${videoWidth}x${videoHeight}`;
+        return `zoompan=z='min(zoom+0.0015,1.5)':d=${totalFrames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${videoWidth}x${videoHeight},setsar=1`;
     }
 }
 
@@ -225,43 +222,40 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
         const totalFrames = Math.round(segmentDuration * fps);
         
         if (video.assetType === 'video') {
-            // Updated video processing code to maintain aspect ratio
+            const upscaledWidth = videoWidth * 10;
+            const upscaledHeight = videoHeight * 10;
+            
             const direction = directions[Math.floor(Math.random() * directions.length)];
             let zoomFilter = '';
             
             switch (direction) {
                 case 'center':
-                    zoomFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                               `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
                                `zoompan=z='pzoom+0.001':` +
                                `x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':` +
                                `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
                     break;
                 case 'top-left':
-                    zoomFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                               `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
                                `zoompan=z='pzoom+0.003':` +
                                `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
                     break;
                 case 'top-right':
-                    zoomFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                               `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
                                `zoompan=z='pzoom+0.005':` +
                                `x='iw/2+iw/zoom/2':y='0':` +
                                `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
                     break;
                 case 'bottom-left':
-                    zoomFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                               `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
                                `zoompan=z='pzoom+0.003':` +
-                               `y='${videoHeight*2}':` +
+                               `y='${upscaledHeight}':` +
                                `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
                     break;
                 case 'bottom-right':
-                    zoomFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                               `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
                                `zoompan=z='pzoom+0.003':` +
-                               `x='iw/2+iw/zoom/2':y='${videoHeight*2}':` +
+                               `x='iw/2+iw/zoom/2':y='${upscaledHeight}':` +
                                `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
                     break;
             }
@@ -272,14 +266,9 @@ function addImageAnimationsStyle4(videoLoop, videoWidth, videoHeight) {
                 filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS[v${i}];`;
             }
         } else {
-            // Keep existing image processing code
             const zoomFactor = 1.2;
             const zoomIncrement = (zoomFactor - 1) / totalFrames;
-            
-            // Ensure cropping is done from the center of the image
-            let moveFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                           `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
-                           `zoompan=z='1+${zoomIncrement}*on':`;
+            let moveFilter = `scale=8000x4000,zoompan=z='1+${zoomIncrement}*on':`;
             
             const direction = directions[Math.floor(Math.random() * directions.length)];
             switch (direction) {
@@ -372,57 +361,49 @@ function addImageAnimationsStyle2(videoLoop, videoWidth, videoHeight) {
         const totalFrames = Math.round(segmentDuration * fps);
         
         if (video.assetType === 'video') {
-            // Updated video processing code to maintain aspect ratio
+            const upscaledWidth = videoWidth * 10;
+            const upscaledHeight = videoHeight * 10;
+            
             const direction = directions[Math.floor(Math.random() * directions.length)];
             let zoomFilter = '';
             
             switch (direction) {
                 case 'center':
-                    zoomFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                               `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
                                `zoompan=z='pzoom+0.001':` +
                                `x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':` +
                                `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
                     break;
                 case 'top-left':
-                    zoomFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                               `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
                                `zoompan=z='pzoom+0.003':` +
                                `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
                     break;
                 case 'top-right':
-                    zoomFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                               `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
                                `zoompan=z='pzoom+0.005':` +
                                `x='iw/2+iw/zoom/2':y='0':` +
                                `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
                     break;
                 case 'bottom-left':
-                    zoomFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                               `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
                                `zoompan=z='pzoom+0.003':` +
-                               `y='${videoHeight*2}':` +
+                               `y='${upscaledHeight}':` +
                                `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
                     break;
                 case 'bottom-right':
-                    zoomFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                               `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
+                    zoomFilter = `scale=${upscaledWidth}:${upscaledHeight},` +
                                `zoompan=z='pzoom+0.003':` +
-                               `x='iw/2+iw/zoom/2':y='${videoHeight*2}':` +
+                               `x='iw/2+iw/zoom/2':y='${upscaledHeight}':` +
                                `d=1:s=${videoWidth}x${videoHeight}:fps=${fps},setsar=1`;
                     break;
             }
             
             filterComplex += `[${i}:v]${zoomFilter},setpts=PTS-STARTPTS[v${i}];`;
         } else {
-            // Updated image processing with proper aspect ratio handling
             const zoomFactor = 1.2;
             const zoomIncrement = (zoomFactor - 1) / totalFrames;
-            
-            // Updated image processing with improved center cropping
-            let moveFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                           `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
-                           `zoompan=z='1+${zoomIncrement}*on':`;
+            let moveFilter = `scale=8000x4000,zoompan=z='1+${zoomIncrement}*on':`;
             
             const direction = directions[Math.floor(Math.random() * directions.length)];
             switch (direction) {
@@ -447,7 +428,6 @@ function addImageAnimationsStyle2(videoLoop, videoWidth, videoHeight) {
         }
     });
 
-    // Rest of the existing function
     if (videoLoop.length > 1) {
         const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
         filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
@@ -533,7 +513,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     console.log('API Data:', JSON.stringify(apiData, null, 2));
 
-    // Extract data from API response - FIXED color property destructuring
+    // Extract data from API response
     let {
       videos: apiVideos,
       voiceoverUrl: audio_link,
@@ -546,23 +526,15 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       showProgressBar: show_progression_bar,
       watermark,
       watermarkIcon: logo_url,
-      color_text1: colorText1, // Fix: correctly map from snake_case to camelCase
-      color_text2: colorText2, // Fix: correctly map from snake_case to camelCase
-      color_bg: colorBg,       // Fix: correctly map from snake_case to camelCase
+      colorText1,
+      colorText2,
+      colorBg,
       positionY,
       duration: apiDuration,
       words,
       fontFile,
-      bg_music_file: backgroundMusicUrl,
+      bg_music_file: backgroundMusicUrl, // Update this line to use bg_music_file
     } = apiData;
-
-    // Check for and apply color values from options if available
-    colorText1 = options.colorText1 || colorText1 || '#FFFFFF';
-    colorText2 = options.colorText2 || colorText2 || '#000000';
-    colorBg = options.colorBg || colorBg || '#FF00FF';
-
-    // Log color values to verify they're being used
-    console.log('Using colors:', { colorText1, colorText2, colorBg });
 
     // Check if apiVideos is undefined or not an array
     if (!apiVideos || !Array.isArray(apiVideos)) {
@@ -656,8 +628,8 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log('Total duration:', totalDuration);
 
     console.log('Starting video generation process...');
-    ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg/ffmpeg');
-    
+    ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg/ffmpeg'); // Use absolute path for ffmpeg
+
     // Set video dimensions based on resolution and video_type
     let videoWidth, videoHeight;
     switch (resolution) {
@@ -688,13 +660,12 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     console.log(`Video dimensions set to: ${videoWidth}x${videoHeight} (${video_type})`);
 
-    // In the generateVideo function, update the temp directory path
-    const tempDir = path.join(baseDir, 'temp');
+    const tempDir = path.join('/root/VIDEOEDITOR', 'temp');
     await fsp.mkdir(tempDir, { recursive: true });
     console.log('Temporary directory created:', tempDir);
 
-    // Create style-specific subfolder with baseDir
-    const styleFolder = path.join(baseDir, 'output', style);
+    // Create style-specific subfolder
+    const styleFolder = path.join('/root/VIDEOEDITOR', 'output', style);
     await fsp.mkdir(styleFolder, { recursive: true });
     console.log(`Style folder created: ${styleFolder}`);
 
@@ -702,7 +673,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     let outputPath;
 
     // Assign value to outputPath
-    outputPath = path.join(styleFolder, `final_video_${language}_${style}.mp4`);
+    outputPath = path.join('/root/VIDEOEDITOR', 'output', style, `final_video_${language}_${style}.mp4`);
 
     const outputDir = path.dirname(outputPath);
     await fsp.mkdir(outputDir, { recursive: true });
@@ -799,8 +770,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     // Handle font information
     let fontPath;
     let fontName;
-    // Update fonts directory path
-    const fontsDir = path.join(baseDir, 'fonts');
+    const fontsDir = '/root/VIDEOEDITOR/fonts/';
     const availableFonts = {
       'PoetsenOne': 'PoetsenOne-Regular.ttf',
       'Shadow': 'Shadow.otf',
@@ -895,61 +865,29 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
         let filterComplex = '';
 
-        if (style === 'style_4') {
-          // Keep existing style_4 implementation as it already works correctly
+        if (style === 'style_2') {
+          filterComplex = addImageAnimationsStyle2(validVideos, videoWidth, videoHeight);
+        } else if (style === 'style_4') {
           filterComplex = addImageAnimationsStyle4(validVideos, videoWidth, videoHeight);
         } else {
-          // New unified approach for styles 1, 2, and 3 using xfade
-          const transitionDuration = 0.5; // Duration for cross-fade transition
-          const minimumSegmentDuration = transitionDuration * 2; // Ensure segments are long enough for fade
-
-          // Process each asset individually (zoom, pan, scale, crop)
+          // Original animation code with upscale for images
           validVideos.forEach((video, i) => {
-              // Ensure segment duration is sufficient for transitions
-              const segmentDuration = Math.max(video.segmentDuration || video.duration, minimumSegmentDuration);
-              video.segmentDuration = segmentDuration; // Update the duration in the loop object
-
+              const segmentDuration = video.segmentDuration || video.duration;
               const zoomEffect = getRandomEffect(videoWidth, videoHeight, segmentDuration, video.assetType === 'video');
               
-              // Common scaling and cropping for consistent aspect ratio handling
-              let baseFilter = `scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
-                              `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2`;
-
               if (video.assetType === 'video') {
-                  filterComplex += `[${i}:v]${baseFilter},${zoomEffect},setpts=PTS-STARTPTS[v${i}];`;
-              } else { // Image
-                  filterComplex += `[${i}:v]${baseFilter},${zoomEffect},setsar=1,fps=30[v${i}];`;
+                  filterComplex += `[${i}:v]${zoomEffect},setsar=1,setpts=PTS-STARTPTS[v${i}];`;
+              } else {
+                  // Add scale before zoompan for images
+                  filterComplex += `[${i}:v]scale=8000x4000,${zoomEffect},scale=${videoWidth}:${videoHeight}:force_original_aspect_ratio=increase,crop=${videoWidth}:${videoHeight},setsar=1,fps=30[v${i}];`;
               }
           });
 
-          // Apply transitions between segments using xfade
-          if (validVideos.length > 1) {
-              let lastOutput = 'v0';
-              let cumulativeDuration = 0;
-              
-              for (let i = 1; i < validVideos.length; i++) {
-                  const prevSegmentDuration = validVideos[i-1].segmentDuration;
-                  
-                  // Calculate offset ensuring it's not negative and accounts for transition overlap
-                  const offset = Math.max(0.1, cumulativeDuration + prevSegmentDuration - transitionDuration);
-                  
-                  // Use a simple fade transition
-                  filterComplex += `[${lastOutput}][v${i}]xfade=transition=fade:duration=${transitionDuration}:offset=${offset}[xf${i}];`;
-                  
-                  lastOutput = `xf${i}`;
-                  cumulativeDuration += prevSegmentDuration; // Add the duration of the previous segment
-              }
-              
-              // Trim the final output to the calculated total duration
-              const finalTotalDuration = totalVideoDuration;
-              filterComplex += `[${lastOutput}]trim=duration=${finalTotalDuration},setpts=PTS-STARTPTS,format=yuv420p[outv];`;
-          } else if (validVideos.length === 1) {
-              // Handle single asset case
-              filterComplex += `[v0]trim=duration=${validVideos[0].segmentDuration},setpts=PTS-STARTPTS,format=yuv420p[outv];`;
+          if (videoLoop.length > 1) {
+            const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
+            filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
           } else {
-              // Handle no assets case (though should be caught earlier)
-              filterComplex = 'nullsrc=size=1x1:duration=1[outv];'; // Create dummy output
-              console.error("Error: No valid video assets to process in filter complex.");
+            filterComplex += `[v0]copy[outv];`;
           }
         }
 
@@ -1003,43 +941,24 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
             break;
         }
 
-        // Add at the top of generateVideo function
-        let startTime;
-
-        // Inside the FFmpeg command setup
         command
           .complexFilter(filterComplex)
           .outputOptions(outputOptions)
           .output(outputPath)
           .on('start', function(commandLine) {
-            startTime = Date.now();
             console.log('Spawned FFmpeg with command:', commandLine);
           })
           .on('progress', async function(progress) {
-            try {
-              // Calculate progress based on actual elapsed time vs total duration
-              const currentTime = progress.timemark ? 
-                convertTimeToSeconds(progress.timemark) : 
-                (Date.now() - startTime) / 1000;
-
-              const calculatedPercent = Math.min(
-                (currentTime / totalDuration) * 100,
-                99.99 // Never show 100% until completion
-              ).toFixed(2);
-
-              process.stdout.write(`Processing: ${calculatedPercent}% done\r`);
-
-              // Check CPU usage every 5% progress
-              if (Math.floor(calculatedPercent) % 5 === 0) {
-                await waitForCPU(90);
-              }
-              
-              // Existing resource checks
-              if (Math.floor(calculatedPercent) % 20 === 0) {
-                await checkResourcesMiddleStep('FFmpeg Progress');
-              }
-            } catch (error) {
-              console.error('Progress calculation error:', error);
+            console.log('Processing: ' + progress.percent + '% done');
+            
+            // Check CPU usage every 5% progress
+            if (progress.percent % 5 === 0) {
+              await waitForCPU(90); // Wait if CPU > 90%
+            }
+            
+            // Existing resource checks
+            if (progress.percent % 20 === 0) {
+              await checkResourcesMiddleStep('FFmpeg Progress');
             }
           })
           .on('stderr', function(stderrLine) {
@@ -1052,7 +971,6 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
             reject(err);
           })
           .on('end', async () => {
-            console.log('Processing: 100.00% done'); // Explicit 100% only at end
             console.log('Video processing finished');
             // Clean up temporary files except subtitles
             for (const video of validVideos) {
@@ -1078,7 +996,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     await checkResourcesMiddleStep('S3 Upload');
     try {
       // Verify file exists before attempting upload
-      const videoPath = path.join(baseDir, 'output', style, `final_video_${language}_${style}.mp4`);
+      const videoPath = path.join('/root/VIDEOEDITOR', 'output', style, `final_video_${language}_${style}.mp4`);
       console.log('Checking video file:', videoPath);
       
       const fileExists = await verifyFile(videoPath);
@@ -1120,7 +1038,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       return uploadResult.Location;
     } catch (error) {
       console.error('Error in S3 upload process:', error);
-      const videoPath = path.join(baseDir, 'output', style, `final_video_${language}_${style}.mp4`);
+      const videoPath = path.join('/root/VIDEOEDITOR', 'output', style, `final_video_${language}_${style}.mp4`);
       console.log('Falling back to local video path:', videoPath);
       return videoPath;
     }
@@ -1395,22 +1313,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             slideWords[j+1].start = wordEnd + TIMING_EPSILON;
           }
 
-          // Modified code with border radius, bottom padding, and pop in/out animation
-          const radius = Math.min(14, font_size * 0.2); // Calculate appropriate radius based on font size
-          const bottomPadding = Math.ceil(font_size * 0.17); // Add 17% of font size as bottom padding
-          const totalHeight = font_size + bottomPadding; // Total height including padding
-          
-          // Adjust vertical position to shift the highlight downward so padding is at the bottom
-          // Since \an5 positioning is center-based, we need to move the center down by half the padding amount
-          const adjustedY = currentY + bottomPadding/2;
-          
           assContent += `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,` +
-            `{\\an5\\pos(${currentX + wordWidth/2},${adjustedY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&` +
-            `\\alpha&H40&\\fscx95\\fscy95\\t(0,200,\\fscx105\\fscy105)\\t(${Math.round((wordEnd - wordStart - 0.3) * 1000)},` +
-            `${Math.round((wordEnd - wordStart) * 1000)},` +
-            `\\fscx50\\fscy50)\\p1}m ${radius} 0 l ${wordWidth-radius} 0 b ${wordWidth-radius/2} 0 ${wordWidth} ${radius/2} ${wordWidth} ${radius} l ${wordWidth} ${totalHeight-radius} ` +
-            `b ${wordWidth} ${totalHeight-radius/2} ${wordWidth-radius/2} ${totalHeight} ${wordWidth-radius} ${totalHeight} l ${radius} ${totalHeight} ` +
-            `b ${radius/2} ${totalHeight} 0 ${totalHeight-radius/2} 0 ${totalHeight-radius} l 0 ${radius} b 0 ${radius/2} ${radius/2} 0 ${radius} 0{\\p0}\n`;
+            `{\\an5\\pos(${currentX + wordWidth/2},${currentY})\\bord0\\shad0\\c&H${colorBg.slice(1).match(/../g).reverse().join('')}&` +
+            `\\alpha&H40&\\p1}m 0 0 l ${wordWidth} 0 ${wordWidth} ${font_size} 0 ${font_size}{\\p0}\n`;
 
           currentX += wordWidth + wordSpacing;
         }
@@ -1492,7 +1397,7 @@ async function extendAudio(inputPath, outputPath, duration) {
 
 // Add this function to your test.js file
 async function storeAPIRequirements(language, style, apiData, outputPath, fontPath, totalVideoDuration) {
-  const styleFolder = path.join(baseDir, 'output', style);
+  const styleFolder = path.join('/root/VIDEOEDITOR', 'output', style);
   await fsp.mkdir(styleFolder, { recursive: true });
   const requirementsPath = path.join(styleFolder, `requirements_${language}_${style}.txt`);
   
@@ -1858,15 +1763,4 @@ async function verifyFile(filePath) {
     console.error(`Error: ${error.message}`);
     return false;
   }
-}
-
-// Add this helper function outside generateVideo or inside as a nested function
-function convertTimeToSeconds(timemark) {
-  if (!timemark) return 0;
-  const parts = timemark.split(':');
-  if (parts.length < 3) return 0;
-  
-  return parseFloat(parts[0]) * 3600 + 
-         parseFloat(parts[1]) * 60 + 
-         parseFloat(parts[2]);
 }
