@@ -366,9 +366,17 @@ function addImageAnimationsStyle2(videoLoop, videoWidth, videoHeight) {
     let filterComplex = '';
     const fps = 30;
     const directions = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'];
+    const transitionDuration = 0.8;
+    const minimumSegmentDuration = 1.2; // Minimum duration to safely complete a transition
+
+    // Preprocess video segments to ensure minimum duration
+    const processedVideoLoop = videoLoop.map(video => ({
+        ...video,
+        segmentDuration: Math.max(video.segmentDuration || video.duration, minimumSegmentDuration)
+    }));
     
-    videoLoop.forEach((video, i) => {
-        const segmentDuration = video.segmentDuration || video.duration;
+    processedVideoLoop.forEach((video, i) => {
+        const segmentDuration = video.segmentDuration;
         const totalFrames = Math.round(segmentDuration * fps);
         
         if (video.assetType === 'video') {
@@ -447,12 +455,41 @@ function addImageAnimationsStyle2(videoLoop, videoWidth, videoHeight) {
         }
     });
 
-    // Rest of the existing function
-    if (videoLoop.length > 1) {
-        const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
-        filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
+    // Use crossfade transitions like in style_4
+    if (processedVideoLoop.length > 1) {
+        let lastOutput = 'v0';
+        let cumulativeDuration = 0;
+        
+        for (let i = 1; i < processedVideoLoop.length; i++) {
+            const prevSegmentDuration = processedVideoLoop[i-1].segmentDuration;
+            const currentSegmentDuration = processedVideoLoop[i].segmentDuration;
+            
+            // Adjust transition duration based on segment duration
+            const adjustedTransitionDuration = Math.min(
+                transitionDuration,
+                prevSegmentDuration * 0.7, // Use at most 70% of previous segment for transition
+                currentSegmentDuration * 0.5  // Use at most 50% of current segment for transition
+            );
+            
+            // Ensure offset is valid and not negative
+            const offset = Math.max(
+                0.1, // Minimum offset
+                cumulativeDuration + prevSegmentDuration - adjustedTransitionDuration
+            );
+            
+            // Use simple fade transition
+            filterComplex += `[${lastOutput}][v${i}]xfade=transition=fade:duration=${adjustedTransitionDuration}:offset=${offset}[xf${i}];`;
+            
+            lastOutput = `xf${i}`;
+            cumulativeDuration += prevSegmentDuration;
+        }
+        
+        const lastSegmentDuration = processedVideoLoop[processedVideoLoop.length-1].segmentDuration;
+        const totalDuration = cumulativeDuration + lastSegmentDuration;
+        
+        filterComplex += `[${lastOutput}]format=yuv420p[outv];`;
     } else {
-        filterComplex += `[v0]copy[outv];`;
+        filterComplex += `[v0]format=yuv420p[outv];`;
     }
 
     return filterComplex;
@@ -518,6 +555,7 @@ async function monitorFFmpegResources(operation = 'FFmpeg', minRAMPercent = 20) 
 
 // Modify generateVideo to include resource checks at critical points
 async function generateVideo(text, language = 'en', style = 'style_1', options = {}) {
+  const startTime = Date.now();
   try {
     if (!text || text.trim() === '') {
       throw new Error('Empty text provided for video generation');
@@ -652,8 +690,15 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     const lastSegment = transcription_details[transcription_details.length - 1];
     const totalDuration = lastSegment.end;
     
+    // Calculate precise duration based on timing
+    const preciseDuration = Math.max(
+      totalDuration,
+      transcription_details.reduce((sum, segment) => Math.max(sum, segment.end), 0)
+    );
+    
     console.log('Final transcription details:', JSON.stringify(transcription_details, null, 2));
     console.log('Total duration:', totalDuration);
+    console.log('Precise duration for progress bar:', preciseDuration);
 
     console.log('Starting video generation process...');
     ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH || 'ffmpeg'); // Use FFMPEG_PATH from .env or default to system ffmpeg
@@ -688,11 +733,12 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
 
     console.log(`Video dimensions set to: ${videoWidth}x${videoHeight} (${video_type})`);
 
+    // Update temp directory path
     const tempDir = path.join(baseDir, 'temp');
     await fsp.mkdir(tempDir, { recursive: true });
     console.log('Temporary directory created:', tempDir);
 
-    // Create style-specific subfolder
+    // Update style folder path
     const styleFolder = path.join(baseDir, 'output', style);
     await fsp.mkdir(styleFolder, { recursive: true });
     console.log(`Style folder created: ${styleFolder}`);
@@ -781,9 +827,9 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     const lastIndex = transcription_details.length - 1;
     for (let i = 0; i < transcription_details.length; i++) {
       if (i === lastIndex) {
-        // Last segment goes to the end
+        // Last segment goes to the end with exact timing
         transcription_details[i].end = targetDuration;
-        transcription_details[i].duration = targetDuration - transcription_details[i].start;
+        transcription_details[i].duration = transcription_details[i].end - transcription_details[i].start;
       } else {
         // Adjust other segments proportionally
         const ratio = targetDuration / transcription_details[lastIndex].end;
@@ -798,6 +844,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     // Handle font information
     let fontPath;
     let fontName;
+    // Update fonts directory path
     const fontsDir = path.join(baseDir, 'fonts');
     const availableFonts = {
       'PoetsenOne': 'PoetsenOne-Regular.ttf',
@@ -898,29 +945,67 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
         } else if (style === 'style_4') {
           filterComplex = addImageAnimationsStyle4(validVideos, videoWidth, videoHeight);
         } else {
-          // Original animation code with upscale for images and proper aspect ratio preservation
-          validVideos.forEach((video, i) => {
-              const segmentDuration = video.segmentDuration || video.duration;
+          // Apply style_4 like segmentation with simple fade transitions for other styles
+          const minimumSegmentDuration = 1.2; // Minimum duration to safely complete a transition
+          const transitionDuration = 0.8;
+
+          // Preprocess video segments to ensure minimum duration
+          const processedVideos = validVideos.map(video => ({
+              ...video,
+              segmentDuration: Math.max(video.segmentDuration || video.duration, minimumSegmentDuration)
+          }));
+
+          // First, create the individual video filters
+          processedVideos.forEach((video, i) => {
+              const segmentDuration = video.segmentDuration;
               const zoomEffect = getRandomEffect(videoWidth, videoHeight, segmentDuration, video.assetType === 'video');
               
               if (video.assetType === 'video') {
-                  // Apply proper aspect ratio preservation for videos in style_1
                   filterComplex += `[${i}:v]scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
                                  `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
                                  `${zoomEffect},setpts=PTS-STARTPTS[v${i}];`;
               } else {
-                  // Improved center cropping approach
                   filterComplex += `[${i}:v]scale=${videoWidth*2}:${videoHeight*2}:force_original_aspect_ratio=increase,` +
                                  `crop=${videoWidth*2}:${videoHeight*2}:x=(in_w-out_w)/2:y=(in_h-out_h)/2,` +
                                  `${zoomEffect},setsar=1,fps=30[v${i}];`;
               }
           });
 
-          if (videoLoop.length > 1) {
-            const inputs = videoLoop.map((_, i) => `[v${i}]`).join('');
-            filterComplex += `${inputs}concat=n=${videoLoop.length}:v=1:a=0[outv];`;
+          // Then crossfade them together like in style_4
+          if (processedVideos.length > 1) {
+              let lastOutput = 'v0';
+              let cumulativeDuration = 0;
+              
+              for (let i = 1; i < processedVideos.length; i++) {
+                  const prevSegmentDuration = processedVideos[i-1].segmentDuration;
+                  const currentSegmentDuration = processedVideos[i].segmentDuration;
+                  
+                  // Adjust transition duration based on segment duration
+                  const adjustedTransitionDuration = Math.min(
+                      transitionDuration,
+                      prevSegmentDuration * 0.7, // Use at most 70% of previous segment for transition
+                      currentSegmentDuration * 0.5  // Use at most 50% of current segment for transition
+                  );
+                  
+                  // Ensure offset is valid and not negative
+                  const offset = Math.max(
+                      0.1, // Minimum offset
+                      cumulativeDuration + prevSegmentDuration - adjustedTransitionDuration
+                  );
+                  
+                  // Use simple fade transition for non-style_4 styles
+                  filterComplex += `[${lastOutput}][v${i}]xfade=transition=fade:duration=${adjustedTransitionDuration}:offset=${offset}[xf${i}];`;
+                  
+                  lastOutput = `xf${i}`;
+                  cumulativeDuration += prevSegmentDuration;
+              }
+              
+              const lastSegmentDuration = processedVideos[processedVideos.length-1].segmentDuration;
+              const totalDuration = cumulativeDuration + lastSegmentDuration;
+              
+              filterComplex += `[${lastOutput}]format=yuv420p[outv];`;
           } else {
-            filterComplex += `[v0]copy[outv];`;
+              filterComplex += `[v0]format=yuv420p[outv];`;
           }
         }
 
@@ -933,9 +1018,15 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           filterComplex += '[bar]split[bar1][bar2];';
           filterComplex += '[bar1]trim=duration=' + totalDuration + '[bar1];';
           filterComplex += '[bar2]trim=duration=' + totalDuration + ',geq='
-            + 'r=\'if(lte(X,W*T/' + totalDuration + '),' + parseInt(colorBg.slice(1, 3), 16) + ',' + parseInt(colorText2.slice(1, 3), 16) + ')\':'
-            + 'g=\'if(lte(X,W*T/' + totalDuration + '),' + parseInt(colorBg.slice(3, 5), 16) + ',' + parseInt(colorText2.slice(3, 5), 16) + ')\':'
-            + 'b=\'if(lte(X,W*T/' + totalDuration + '),' + parseInt(colorBg.slice(5, 7), 16) + ',' + parseInt(colorText2.slice(5, 7), 16) + ')\''
+            + 'r=\'if(lte(X,W*min(1.01*T/' + totalDuration + ',1)),'
+              + parseInt(colorBg.slice(1, 3), 16) + ','
+              + parseInt(colorText2.slice(1, 3), 16) + ')\':'
+            + 'g=\'if(lte(X,W*min(1.01*T/' + totalDuration + ',1)),'
+              + parseInt(colorBg.slice(3, 5), 16) + ','
+              + parseInt(colorText2.slice(3, 5), 16) + ')\':'
+            + 'b=\'if(lte(X,W*min(1.01*T/' + totalDuration + ',1)),'
+              + parseInt(colorBg.slice(5, 7), 16) + ','
+              + parseInt(colorText2.slice(5, 7), 16) + ')\''
             + '[colorbar];';
           filterComplex += '[bar1][colorbar]overlay[progressbar];';
           filterComplex += '[outv_sub][progressbar]overlay=0:0[outv_final]';
@@ -956,7 +1047,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
           '-async', '1',
           '-vsync', '1',
           '-max_interleave_delta', '0',
-          '-t', `${totalDuration + (style === 'style_4' ? 3.0 : 0)}`, // Increase to 3 seconds buffer for style_4
+          '-t', `${totalDuration}`, // Remove buffer time
           '-b:v', '2500k'
         ];
 
@@ -1083,6 +1174,10 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
       console.error('API Error Details:', error.response.data);
     }
     throw error;
+  } finally {
+    const endTime = Date.now();
+    const totalTime = (endTime - startTime) / 1000;
+    console.log(`\nTotal video generation time: ${totalTime.toFixed(2)} seconds`);
   }
 }
 
