@@ -13,10 +13,33 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
+// added CORS support
+const cors = require('cors');
+app.use(cors());
+
 // Define base directory constant
 const baseDir = '/root/VIDEOEDITOR';
 
 dotenv.config({ path: path.join(baseDir, '.env') });
+
+// Set ffmpeg and ffprobe paths
+const ffmpegPath = process.env.FFMPEG_PATH || '/usr/local/bin/ffmpeg/ffmpeg';
+const ffprobePath = process.env.FFPROBE_PATH || '/usr/bin/ffprobe';
+
+// Check if the paths exist and set them
+if (fs.existsSync(ffmpegPath)) {
+  ffmpeg.setFfmpegPath(ffmpegPath);
+  console.log(`FFmpeg path set to: ${ffmpegPath}`);
+} else {
+  console.warn(`FFmpeg not found at ${ffmpegPath}. Relying on system PATH.`);
+}
+
+if (fs.existsSync(ffprobePath)) {
+  ffmpeg.setFfprobePath(ffprobePath);
+  console.log(`FFprobe path set to: ${ffprobePath}`);
+} else {
+  console.warn(`FFprobe not found at ${ffprobePath}. Relying on system PATH.`);
+}
 
 console.log('Environment variables loaded:', {
   accessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'Present' : 'Missing',
@@ -599,7 +622,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
   const startTime = Date.now();
   // Declare outputPath at the beginning
   let outputPath;
-  const tempDir = path.join(baseDir, 'temp'); // Updated to use baseDir instead of __dirname
+  const tempDir = path.join(baseDir, 'temp'); // Define tempDir early for cleanup in finally
   
   try {
     if (!text || text.trim() === '') {
@@ -767,7 +790,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     console.log(`Video dimensions set to: ${videoWidth}x${videoHeight} (${video_type})`);
 
     // Create style-specific subfolder
-    const styleFolder = path.join(baseDir, 'output', style); // Updated to use baseDir
+    const styleFolder = path.join(baseDir, 'output', style);
     await fsp.mkdir(styleFolder, { recursive: true });
     console.log(`Style folder created: ${styleFolder}`);
 
@@ -850,7 +873,7 @@ async function generateVideo(text, language = 'en', style = 'style_1', options =
     // Handle font information
     let fontPath;
     let fontName;
-    const fontsDir = path.join(baseDir, 'fonts'); // Updated to use baseDir
+    const fontsDir = path.join(baseDir, 'fonts');
     const availableFonts = {
       'PoetsenOne': 'PoetsenOne-Regular.ttf',
       'Shadow': 'Shadow.otf',
@@ -1537,7 +1560,7 @@ async function extendAudio(inputPath, outputPath, duration) {
 
 // Add this function to your test.js file
 async function storeAPIRequirements(language, style, apiData, outputPath, fontPath, totalVideoDuration) {
-  const styleFolder = path.join(baseDir, 'output', style); // Updated to use baseDir
+  const styleFolder = path.join(baseDir, 'output', style);
   await fsp.mkdir(styleFolder, { recursive: true });
   const requirementsPath = path.join(styleFolder, `requirements_${language}_${style}.txt`);
   
